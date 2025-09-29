@@ -1,0 +1,17 @@
+{
+  "price_limit": 50.0,
+  "network": "192.168.1.0/24",
+  "check_price_interval": "15m",
+  "miners_state_check_interval": "1m",
+  "dry_run": false,
+  "api_timeout": "30s",
+  "log_level": "info",
+  "log_format": "text",
+  "miner_timeout": "5s",
+  "health_check_port": 8080,
+  "security_token": "<security token>",
+  "fanr_high_threshold": 70,
+  "fanr_low_threshold": 50,
+  "url_format": "https://web-api.tp.entsoe.eu/api?documentType=A44&out_Domain=10YLV-1001A00074&in_Domain=10YLV-1001A00074&periodStart=%s&periodEnd=%s&securityToken=%s",
+  "location": "CET"
+}
