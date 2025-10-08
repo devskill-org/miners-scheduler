@@ -113,20 +113,24 @@ func (s *MinerScheduler) Start(ctx context.Context) error {
 		}
 	}
 
-	// Run the first check immediately
-	go s.runPriceCheck()
+	// Run the first checks immediately
+	s.runMinerDiscovery()
+	s.runPriceCheck()
 
 	// Get initial delay
 	now := time.Now()
 	initialDelay := s.getInitialDelay(now) + time.Second
 	s.logger.Printf("Schedule next check for %v", now.Add(initialDelay))
 
-	// Start the periodic tickers for price checking and state checking
+	// Start the periodic tickers for price checking, state checking, and miner discovery
 	priceCheckTicker := time.NewTicker(s.config.CheckPriceInterval)
 	defer priceCheckTicker.Stop()
 
 	stateCheckTicker := time.NewTicker(s.config.MinersStateCheckInterval)
 	defer stateCheckTicker.Stop()
+
+	minerDiscoveryTicker := time.NewTicker(s.config.MinerDiscoveryInterval)
+	defer minerDiscoveryTicker.Stop()
 
 	initialDelayTick := time.After(initialDelay)
 
@@ -146,6 +150,8 @@ Loop:
 			break Loop
 		case <-stateCheckTicker.C:
 			go s.runStateCheck()
+		case <-minerDiscoveryTicker.C:
+			go s.runMinerDiscovery()
 		}
 	}
 
@@ -162,6 +168,8 @@ Loop:
 			go s.runPriceCheck()
 		case <-stateCheckTicker.C:
 			go s.runStateCheck()
+		case <-minerDiscoveryTicker.C:
+			go s.runMinerDiscovery()
 		}
 	}
 }
@@ -201,15 +209,9 @@ func (s *MinerScheduler) IsRunning() bool {
 
 // runPriceCheck executes the main scheduler task
 func (s *MinerScheduler) runPriceCheck() {
-	s.logger.Printf("Starting scheduled task at %s", time.Now().Format(time.RFC3339))
+	s.logger.Printf("Starting price check task at %s", time.Now().Format(time.RFC3339))
 
-	// Step 1: Discover Avalon miners
-	if err := s.discoverMiners(); err != nil {
-		s.logger.Printf("Error discovering miners: %v", err)
-		return
-	}
-
-	// Step 2: Get current electricity price
+	// Step 1: Get current electricity price
 	currentPrice, err := s.getCurrentPrice()
 	if err != nil {
 		s.logger.Printf("Error getting current price: %v", err)
@@ -219,13 +221,13 @@ func (s *MinerScheduler) runPriceCheck() {
 	s.logger.Printf("Current electricity price: %.2f EUR/MWh", currentPrice)
 	s.logger.Printf("Price limit: %.2f EUR/MWh", s.config.PriceLimit)
 
-	// Step 3: Manage miners based on price
+	// Step 2: Manage miners based on price
 	if err := s.manageMiners(currentPrice); err != nil {
 		s.logger.Printf("Error managing miners: %v", err)
 		return
 	}
 
-	s.logger.Printf("Scheduled task completed successfully")
+	s.logger.Printf("Price check task completed successfully")
 }
 
 // discoverMiners discovers Avalon miners on the network and stores them
@@ -252,6 +254,18 @@ func (s *MinerScheduler) discoverMiners() error {
 	s.logger.Printf("Discovery complete: %d total miners (%d newly discovered)", totalMiners, newMinersCount)
 
 	return nil
+}
+
+// runMinerDiscovery runs the miner discovery process as a scheduled task
+func (s *MinerScheduler) runMinerDiscovery() {
+	s.logger.Printf("Starting miner discovery task at %s", time.Now().Format(time.RFC3339))
+
+	if err := s.discoverMiners(); err != nil {
+		s.logger.Printf("Error discovering miners: %v", err)
+		return
+	}
+
+	s.logger.Printf("Miner discovery task completed successfully")
 }
 
 // getCurrentPrice gets the current electricity price, downloading new data if needed

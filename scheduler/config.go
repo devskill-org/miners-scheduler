@@ -15,6 +15,7 @@ type Config struct {
 	Network                  string        `json:"network"`                     // Network to scan for miners (CIDR notation)
 	CheckPriceInterval       time.Duration `json:"check_price_interval"`        // How often to run the task
 	MinersStateCheckInterval time.Duration `json:"miners_state_check_interval"` // How often to check miners state
+	MinerDiscoveryInterval   time.Duration `json:"miner_discovery_interval"`    // How often to discover miners
 	DryRun                   bool          `json:"dry_run"`                     // Run in dry-run mode (simulate actions without executing)
 
 	// API settings
@@ -47,6 +48,7 @@ func DefaultConfig() *Config {
 		Network:                  "192.168.88.0/24",
 		CheckPriceInterval:       15 * time.Minute,
 		MinersStateCheckInterval: 1 * time.Minute,
+		MinerDiscoveryInterval:   10 * time.Minute,
 		DryRun:                   false,
 		APITimeout:               30 * time.Second,
 		LogLevel:                 "info",
@@ -125,6 +127,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("miners_state_check_interval must be greater than 0, got: %s", c.MinersStateCheckInterval)
 	}
 
+	if c.MinerDiscoveryInterval <= 0 {
+		return fmt.Errorf("miner_discovery_interval must be greater than 0, got: %s", c.MinerDiscoveryInterval)
+	}
+
 	if c.APITimeout <= 0 {
 		return fmt.Errorf("api_timeout must be greater than 0, got: %s", c.APITimeout)
 	}
@@ -171,12 +177,14 @@ func (c *Config) MarshalJSON() ([]byte, error) {
 		*Alias
 		CheckInterval            string `json:"check_price_interval"`
 		MinersStateCheckInterval string `json:"miners_state_check_interval"`
+		MinerDiscoveryInterval   string `json:"miner_discovery_interval"`
 		APITimeout               string `json:"api_timeout"`
 		MinerTimeout             string `json:"miner_timeout"`
 	}{
 		Alias:                    (*Alias)(c),
 		CheckInterval:            c.CheckPriceInterval.String(),
 		MinersStateCheckInterval: c.MinersStateCheckInterval.String(),
+		MinerDiscoveryInterval:   c.MinerDiscoveryInterval.String(),
 		APITimeout:               c.APITimeout.String(),
 		MinerTimeout:             c.MinerTimeout.String(),
 	})
@@ -189,6 +197,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		*Alias
 		CheckPriceInterval       string `json:"check_price_interval"`
 		MinersStateCheckInterval string `json:"miners_state_check_interval"`
+		MinerDiscoveryInterval   string `json:"miner_discovery_interval"`
 		APITimeout               string `json:"api_timeout"`
 		MinerTimeout             string `json:"miner_timeout"`
 		UrlFormat                string `json:"url_format"`
@@ -210,6 +219,12 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	if aux.MinersStateCheckInterval != "" {
 		if c.MinersStateCheckInterval, err = time.ParseDuration(aux.MinersStateCheckInterval); err != nil {
 			return fmt.Errorf("invalid miners_state_check_interval: %w", err)
+		}
+	}
+
+	if aux.MinerDiscoveryInterval != "" {
+		if c.MinerDiscoveryInterval, err = time.ParseDuration(aux.MinerDiscoveryInterval); err != nil {
+			return fmt.Errorf("invalid miner_discovery_interval: %w", err)
 		}
 	}
 

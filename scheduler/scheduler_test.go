@@ -20,12 +20,12 @@ func TestNewMinerScheduler(t *testing.T) {
 	}{
 		{
 			name:   "valid parameters",
-			config: &Config{PriceLimit: 50.0, Network: "192.168.1.0/24"},
+			config: &Config{PriceLimit: 50.0, Network: "192.168.1.0/24", MinerDiscoveryInterval: 10 * time.Minute},
 			logger: log.New(os.Stdout, "TEST", log.LstdFlags),
 		},
 		{
 			name:   "nil logger",
-			config: &Config{PriceLimit: 75.5, Network: "10.0.0.0/16"},
+			config: &Config{PriceLimit: 75.5, Network: "10.0.0.0/16", MinerDiscoveryInterval: 10 * time.Minute},
 			logger: nil,
 		},
 	}
@@ -92,6 +92,7 @@ func TestSchedulerRunningState(t *testing.T) {
 		Network:                  "192.168.1.0/24",
 		CheckPriceInterval:       time.Minute,
 		MinersStateCheckInterval: time.Minute,
+		MinerDiscoveryInterval:   10 * time.Minute,
 	}, nil)
 
 	// Initially not running
@@ -139,6 +140,7 @@ func TestSchedulerDoubleStart(t *testing.T) {
 		Network:                  "192.168.1.0/24",
 		CheckPriceInterval:       time.Minute,
 		MinersStateCheckInterval: time.Minute,
+		MinerDiscoveryInterval:   10 * time.Minute,
 	}, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -169,6 +171,7 @@ func TestSchedulerStop(t *testing.T) {
 		Network:                  "192.168.1.0/24",
 		CheckPriceInterval:       time.Minute,
 		MinersStateCheckInterval: time.Minute,
+		MinerDiscoveryInterval:   10 * time.Minute,
 	}, nil)
 	ctx := context.Background()
 
@@ -207,6 +210,7 @@ func TestGetDiscoveredMiners(t *testing.T) {
 		Network:                  "192.168.1.0/24",
 		CheckPriceInterval:       time.Minute,
 		MinersStateCheckInterval: time.Minute,
+		MinerDiscoveryInterval:   10 * time.Minute,
 	}, nil)
 
 	// Initially empty
@@ -251,6 +255,7 @@ func TestDiscoverMinersPreservesExisting(t *testing.T) {
 		Network:                  "127.0.0.1/32",
 		CheckPriceInterval:       time.Minute,
 		MinersStateCheckInterval: time.Minute,
+		MinerDiscoveryInterval:   10 * time.Minute,
 	}, nil)
 
 	// Mock some initial miners
@@ -295,6 +300,7 @@ func TestGetLatestDocument(t *testing.T) {
 		Network:                  "192.168.1.0/24",
 		CheckPriceInterval:       time.Minute,
 		MinersStateCheckInterval: time.Minute,
+		MinerDiscoveryInterval:   10 * time.Minute,
 	}, nil)
 
 	// Initially nil
@@ -330,6 +336,7 @@ func TestGetStatus(t *testing.T) {
 		Network:                  "192.168.1.0/24",
 		CheckPriceInterval:       time.Minute,
 		MinersStateCheckInterval: time.Minute,
+		MinerDiscoveryInterval:   10 * time.Minute,
 	}, nil)
 
 	status := scheduler.GetStatus()
@@ -357,6 +364,7 @@ func TestSchedulerStatus_WithData(t *testing.T) {
 		Network:                  "192.168.1.0/24",
 		CheckPriceInterval:       time.Minute,
 		MinersStateCheckInterval: time.Minute,
+		MinerDiscoveryInterval:   10 * time.Minute,
 	}, nil)
 
 	// Add some mock data
@@ -406,6 +414,7 @@ func TestSchedulerConcurrency(t *testing.T) {
 		Network:                  "192.168.1.0/24",
 		CheckPriceInterval:       time.Minute,
 		MinersStateCheckInterval: time.Minute,
+		MinerDiscoveryInterval:   10 * time.Minute,
 	}, nil)
 
 	// Test concurrent access to methods
@@ -428,7 +437,7 @@ func TestSchedulerConcurrency(t *testing.T) {
 		go func(id int) {
 			defer func() { done <- true }()
 			for range 100 {
-				scheduler.SetConfig(&Config{PriceLimit: 50.0 + float64(id), Network: "192.168." + string(rune('1'+id)) + ".0/24"})
+				scheduler.SetConfig(&Config{PriceLimit: 50.0 + float64(id), Network: "192.168." + string(rune('1'+id)) + ".0/24", MinerDiscoveryInterval: 10 * time.Minute})
 			}
 		}(i)
 	}
@@ -451,6 +460,7 @@ func BenchmarkSchedulerGetStatus(b *testing.B) {
 		Network:                  "192.168.1.0/24",
 		CheckPriceInterval:       time.Minute,
 		MinersStateCheckInterval: time.Minute,
+		MinerDiscoveryInterval:   10 * time.Minute,
 	}, nil)
 
 	// Add some mock data
@@ -585,6 +595,7 @@ func TestGetInitialDelay(t *testing.T) {
 				Network:                  "192.168.1.0/24",
 				CheckPriceInterval:       tt.priceCheckInterval,
 				MinersStateCheckInterval: tt.stateCheckInterval,
+				MinerDiscoveryInterval:   10 * time.Minute,
 			}
 			scheduler := NewMinerScheduler(config, nil)
 
@@ -608,7 +619,7 @@ func TestGetInitialDelay(t *testing.T) {
 }
 
 func BenchmarkSchedulerGetDiscoveredMiners(b *testing.B) {
-	scheduler := NewMinerScheduler(&Config{PriceLimit: 50.0, Network: "192.168.1.0/24", CheckPriceInterval: time.Minute}, nil)
+	scheduler := NewMinerScheduler(&Config{PriceLimit: 50.0, Network: "192.168.1.0/24", CheckPriceInterval: time.Minute, MinerDiscoveryInterval: 10 * time.Minute}, nil)
 
 	// Add mock miners
 	mockMiners := make([]*miners.AvalonQHost, 1000)
