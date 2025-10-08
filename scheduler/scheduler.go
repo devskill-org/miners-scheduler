@@ -114,8 +114,10 @@ func (s *MinerScheduler) Start(ctx context.Context) error {
 	}
 
 	// Run the first checks immediately
-	s.runMinerDiscovery()
-	s.runPriceCheck()
+	go func() {
+		s.runMinerDiscovery(ctx)
+		s.runPriceCheck(ctx)
+	}()
 
 	// Get initial delay
 	now := time.Now()
@@ -145,13 +147,13 @@ Loop:
 			s.logger.Printf("Scheduler stopping due to stop signal")
 			return nil
 		case <-initialDelayTick:
-			go s.runPriceCheck()
+			go s.runPriceCheck(ctx)
 			priceCheckTicker.Reset(s.GetConfig().CheckPriceInterval)
 			break Loop
 		case <-stateCheckTicker.C:
-			go s.runStateCheck()
+			go s.runStateCheck(ctx)
 		case <-minerDiscoveryTicker.C:
-			go s.runMinerDiscovery()
+			go s.runMinerDiscovery(ctx)
 		}
 	}
 
@@ -165,11 +167,11 @@ Loop:
 			s.logger.Printf("Scheduler stopping due to stop signal")
 			return nil
 		case <-priceCheckTicker.C:
-			go s.runPriceCheck()
+			go s.runPriceCheck(ctx)
 		case <-stateCheckTicker.C:
-			go s.runStateCheck()
+			go s.runStateCheck(ctx)
 		case <-minerDiscoveryTicker.C:
-			go s.runMinerDiscovery()
+			go s.runMinerDiscovery(ctx)
 		}
 	}
 }
@@ -208,11 +210,11 @@ func (s *MinerScheduler) IsRunning() bool {
 }
 
 // runPriceCheck executes the main scheduler task
-func (s *MinerScheduler) runPriceCheck() {
+func (s *MinerScheduler) runPriceCheck(ctx context.Context) {
 	s.logger.Printf("Starting price check task at %s", time.Now().Format(time.RFC3339))
 
 	// Step 1: Get current electricity price
-	currentPrice, err := s.getCurrentPrice()
+	currentPrice, err := s.getCurrentPrice(ctx)
 	if err != nil {
 		s.logger.Printf("Error getting current price: %v", err)
 		return
@@ -222,7 +224,7 @@ func (s *MinerScheduler) runPriceCheck() {
 	s.logger.Printf("Price limit: %.2f EUR/MWh", s.config.PriceLimit)
 
 	// Step 2: Manage miners based on price
-	if err := s.manageMiners(currentPrice); err != nil {
+	if err := s.manageMiners(ctx, currentPrice); err != nil {
 		s.logger.Printf("Error managing miners: %v", err)
 		return
 	}
@@ -231,10 +233,10 @@ func (s *MinerScheduler) runPriceCheck() {
 }
 
 // discoverMiners discovers Avalon miners on the network and stores them
-func (s *MinerScheduler) discoverMiners() error {
+func (s *MinerScheduler) discoverMiners(ctx context.Context) error {
 	s.logger.Printf("Discovering miners on network: %s", s.config.Network)
 
-	newlyDiscoveredMiners := miners.Discover(s.config.Network)
+	newlyDiscoveredMiners := miners.Discover(ctx, s.config.Network)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -257,10 +259,10 @@ func (s *MinerScheduler) discoverMiners() error {
 }
 
 // runMinerDiscovery runs the miner discovery process as a scheduled task
-func (s *MinerScheduler) runMinerDiscovery() {
+func (s *MinerScheduler) runMinerDiscovery(ctx context.Context) {
 	s.logger.Printf("Starting miner discovery task at %s", time.Now().Format(time.RFC3339))
 
-	if err := s.discoverMiners(); err != nil {
+	if err := s.discoverMiners(ctx); err != nil {
 		s.logger.Printf("Error discovering miners: %v", err)
 		return
 	}
@@ -269,7 +271,7 @@ func (s *MinerScheduler) runMinerDiscovery() {
 }
 
 // getCurrentPrice gets the current electricity price, downloading new data if needed
-func (s *MinerScheduler) getCurrentPrice() (float64, error) {
+func (s *MinerScheduler) getCurrentPrice(ctx context.Context) (float64, error) {
 	now := time.Now()
 
 	// Step 2: Try to get price from latest document
@@ -289,7 +291,7 @@ func (s *MinerScheduler) getCurrentPrice() (float64, error) {
 
 	// Step 3: Download new PublicationMarketDocument
 	s.logger.Printf("Downloading new PublicationMarketDocument...")
-	newDoc, err := entsoe.DownloadPublicationMarketDocument(s.config.SecurityToken, s.config.UrlFormat, s.config.Location)
+	newDoc, err := entsoe.DownloadPublicationMarketDocument(ctx, s.config.SecurityToken, s.config.UrlFormat, s.config.Location)
 	if err != nil {
 		return 0, fmt.Errorf("failed to download PublicationMarketDocument: %w", err)
 	}
@@ -311,7 +313,7 @@ func (s *MinerScheduler) getCurrentPrice() (float64, error) {
 }
 
 // manageMiners manages miner states based on current price vs price limit
-func (s *MinerScheduler) manageMiners(currentPrice float64) error {
+func (s *MinerScheduler) manageMiners(ctx context.Context, currentPrice float64) error {
 	priceLimit := s.config.PriceLimit
 	minersList := s.GetDiscoveredMiners()
 
@@ -334,7 +336,7 @@ func (s *MinerScheduler) manageMiners(currentPrice float64) error {
 			defer wg.Done()
 
 			// Get current stats
-			stats, err := m.GetLiteStats()
+			stats, err := m.GetLiteStats(ctx)
 			if err != nil {
 				errChan <- fmt.Errorf("failed to get stats for miner %s:%d: %w", m.Address, m.Port, err)
 				return
@@ -359,7 +361,7 @@ func (s *MinerScheduler) manageMiners(currentPrice float64) error {
 						s.logger.Printf("Price (%.2f) <= limit (%.2f), waking up miner %s:%d",
 							currentPrice, priceLimit, m.Address, m.Port)
 
-						response, err := m.WakeUp()
+						response, err := m.WakeUp(ctx)
 						if err != nil {
 							errChan <- fmt.Errorf("failed to wake up miner %s:%d: %w", m.Address, m.Port, err)
 							return
@@ -380,7 +382,7 @@ func (s *MinerScheduler) manageMiners(currentPrice float64) error {
 						s.logger.Printf("Price (%.2f) > limit (%.2f), putting miner %s:%d into standby",
 							currentPrice, priceLimit, m.Address, m.Port)
 
-						response, err := m.Standby()
+						response, err := m.Standby(ctx)
 						if err != nil {
 							errChan <- fmt.Errorf("failed to put miner %s:%d into standby: %w", m.Address, m.Port, err)
 							return
@@ -455,7 +457,7 @@ func (s *MinerScheduler) getLastDocumentTime() *time.Time {
 }
 
 // runStateCheck executes the state monitoring task for miners
-func (s *MinerScheduler) runStateCheck() {
+func (s *MinerScheduler) runStateCheck(ctx context.Context) {
 	minersList := s.GetDiscoveredMiners()
 	if len(minersList) == 0 {
 		return
@@ -472,7 +474,7 @@ func (s *MinerScheduler) runStateCheck() {
 			defer wg.Done()
 
 			// Get current stats
-			stats, err := m.GetLiteStats()
+			stats, err := m.GetLiteStats(ctx)
 			if err != nil {
 				errChan <- fmt.Errorf("failed to get stats for miner %s:%d: %w", m.Address, m.Port, err)
 				return
@@ -515,7 +517,7 @@ func (s *MinerScheduler) runStateCheck() {
 					} else {
 						s.logger.Printf("FanR (%d%%) > %d%%, setting miner %s:%d to Standard work mode",
 							fanR, s.config.FanRHighThreshold, m.Address, m.Port)
-						response, err := m.SetWorkMode(miners.AvalonStandardMode, false)
+						response, err := m.SetWorkMode(ctx, miners.AvalonStandardMode, false)
 						if err != nil {
 							errChan <- fmt.Errorf("failed to set miner %s:%d to Standard mode: %w", m.Address, m.Port, err)
 							return
@@ -530,7 +532,7 @@ func (s *MinerScheduler) runStateCheck() {
 					} else {
 						s.logger.Printf("FanR (%d%%) > %d%%, setting miner %s:%d to Eco work mode",
 							fanR, s.config.FanRHighThreshold, m.Address, m.Port)
-						response, err := m.SetWorkMode(miners.AvalonEcoMode, false)
+						response, err := m.SetWorkMode(ctx, miners.AvalonEcoMode, false)
 						if err != nil {
 							errChan <- fmt.Errorf("failed to set miner %s:%d to Eco mode: %w", m.Address, m.Port, err)
 							return
@@ -556,7 +558,7 @@ func (s *MinerScheduler) runStateCheck() {
 					} else {
 						s.logger.Printf("All FanR < %d%%, setting miner %s:%d to Standard work mode",
 							s.config.FanRLowThreshold, m.Address, m.Port)
-						response, err := m.SetWorkMode(miners.AvalonStandardMode, true)
+						response, err := m.SetWorkMode(ctx, miners.AvalonStandardMode, true)
 						if err != nil {
 							errChan <- fmt.Errorf("failed to set miner %s:%d to Standard mode: %w", m.Address, m.Port, err)
 							return
@@ -571,7 +573,7 @@ func (s *MinerScheduler) runStateCheck() {
 					} else {
 						s.logger.Printf("All FanR < %d%%, setting miner %s:%d to Super work mode",
 							s.config.FanRLowThreshold, m.Address, m.Port)
-						response, err := m.SetWorkMode(miners.AvalonSuperMode, true)
+						response, err := m.SetWorkMode(ctx, miners.AvalonSuperMode, true)
 						if err != nil {
 							errChan <- fmt.Errorf("failed to set miner %s:%d to Super mode: %w", m.Address, m.Port, err)
 							return

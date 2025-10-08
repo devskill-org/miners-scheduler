@@ -43,7 +43,7 @@ type DownloadOptions struct {
 	Headers   map[string]string
 }
 
-func DownloadPublicationMarketDocument(securityToken string, urlFormat string, locationStr string) (*PublicationMarketDocument, error) {
+func DownloadPublicationMarketDocument(ctx context.Context, securityToken string, urlFormat string, locationStr string) (*PublicationMarketDocument, error) {
 	location, err := time.LoadLocation(locationStr)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func DownloadPublicationMarketDocument(securityToken string, urlFormat string, l
 	url := buildPublicationMarketDocumentURL(securityToken, urlFormat, now)
 
 	client := NewAPIClient()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	marketDocument, err := client.DownloadPublicationMarketDocument(ctx, url)
 	if err != nil {

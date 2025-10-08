@@ -273,7 +273,7 @@ func TestDiscoverMinersPreservesExisting(t *testing.T) {
 	scheduler.mu.Unlock()
 
 	// Run discovery (should not find anything on 127.0.0.1/32, but existing miners should be preserved)
-	err := scheduler.discoverMiners()
+	err := scheduler.discoverMiners(context.Background())
 	if err != nil {
 		t.Errorf("Discovery failed: %v", err)
 	}
@@ -665,7 +665,7 @@ func TestRunStateCheckDryRun(t *testing.T) {
 	scheduler := NewMinerScheduler(config, nil)
 
 	// Test that runStateCheck doesn't panic with no miners
-	scheduler.runStateCheck()
+	scheduler.runStateCheck(context.Background())
 
 	// Verify the method exists and can be called
 	if scheduler.config.DryRun != true {

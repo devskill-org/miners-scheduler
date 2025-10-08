@@ -315,7 +315,7 @@ func (s *StatsItem) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func Discover(network string) []*AvalonQHost {
+func Discover(ctx context.Context, network string) []*AvalonQHost {
 	hosts := make([]*AvalonQHost, 0)
 	var wg sync.WaitGroup
 	queue := make(chan string, 25)
@@ -323,7 +323,7 @@ func Discover(network string) []*AvalonQHost {
 		address := a.String()
 		queue <- address
 		wg.Go(func() {
-			if v, err := version(address, 4028); err == nil {
+			if v, err := version(ctx, address, 4028); err == nil {
 				hosts = append(hosts, &AvalonQHost{
 					Address: address,
 					Port:    4028,
@@ -351,9 +351,9 @@ func getAddresses(network string) iter.Seq[netip.Addr] {
 	}
 }
 
-func (h *AvalonQHost) Standby() (string, error) {
-	h.SetWorkMode(AvalonEcoMode, true)
-	return send(h.Address, h.Port,
+func (h *AvalonQHost) Standby(ctx context.Context) (string, error) {
+	h.SetWorkMode(ctx, AvalonEcoMode, true)
+	return send(ctx, h.Address, h.Port,
 		func(conn net.Conn) error {
 			_, err := fmt.Fprintf(conn, "ascset|0,softoff,1: %d", time.Now().Unix())
 			return err
@@ -362,11 +362,11 @@ func (h *AvalonQHost) Standby() (string, error) {
 	)
 }
 
-func (h *AvalonQHost) SetWorkMode(mode AvalonWorkMode, resetHistory bool) (string, error) {
+func (h *AvalonQHost) SetWorkMode(ctx context.Context, mode AvalonWorkMode, resetHistory bool) (string, error) {
 	if resetHistory {
 		h.ResetLiteStats()
 	}
-	return send(h.Address, h.Port,
+	return send(ctx, h.Address, h.Port,
 		func(conn net.Conn) error {
 			_, err := fmt.Fprintf(conn, "ascset|0,workmode,set,%d", mode)
 			return err
@@ -375,9 +375,9 @@ func (h *AvalonQHost) SetWorkMode(mode AvalonWorkMode, resetHistory bool) (strin
 	)
 }
 
-func (h *AvalonQHost) WakeUp() (string, error) {
+func (h *AvalonQHost) WakeUp(ctx context.Context) (string, error) {
 	h.ResetLiteStats()
-	return send(h.Address, h.Port,
+	return send(ctx, h.Address, h.Port,
 		func(conn net.Conn) error {
 			_, err := fmt.Fprintf(conn, "ascset|0,softon,1: %d", time.Now().Unix())
 			return err
@@ -386,8 +386,8 @@ func (h *AvalonQHost) WakeUp() (string, error) {
 	)
 }
 
-func (h *AvalonQHost) GetLiteStats() (*AvalonQLiteStats, error) {
-	return send(h.Address, h.Port,
+func (h *AvalonQHost) GetLiteStats(ctx context.Context) (*AvalonQLiteStats, error) {
+	return send(ctx, h.Address, h.Port,
 		func(conn net.Conn) error {
 			return writeCommand("litestats", conn)
 		},
@@ -400,8 +400,8 @@ func (h *AvalonQHost) GetLiteStats() (*AvalonQLiteStats, error) {
 		})
 }
 
-func version(address string, port int) (*AvalonQVersion, error) {
-	return send(address, port,
+func version(ctx context.Context, address string, port int) (*AvalonQVersion, error) {
+	return send(ctx, address, port,
 		func(conn net.Conn) error {
 			return writeCommand("version", conn)
 		},
@@ -414,9 +414,9 @@ func version(address string, port int) (*AvalonQVersion, error) {
 		})
 }
 
-func send[T any](address string, port int, sender Sender, receiver Receiver[T]) (T, error) {
+func send[T any](ctx context.Context, address string, port int, sender Sender, receiver Receiver[T]) (T, error) {
 	var d net.Dialer
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
 	conn, err := d.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", address, port))
