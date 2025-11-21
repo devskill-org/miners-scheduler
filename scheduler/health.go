@@ -185,8 +185,8 @@ func (hs *HealthServer) statusHandler(w http.ResponseWriter, r *http.Request) {
 		response["price_data"].(map[string]any)["created_at"] = doc.CreatedDateTime
 
 		// Add current price if available
-		if price, found := doc.LookupPriceByTime(time.Now()); found {
-			response["price_data"].(map[string]any)["current_price"] = price
+		if price, found := doc.LookupAveragePriceInHourByTime(time.Now()); found {
+			response["price_data"].(map[string]any)["current_avg_price"] = price
 			response["price_data"].(map[string]any)["price_vs_limit"] = map[string]any{
 				"current": price,
 				"limit":   hs.scheduler.GetConfig().PriceLimit,

@@ -214,13 +214,13 @@ func (s *MinerScheduler) runPriceCheck(ctx context.Context) {
 	s.logger.Printf("Starting price check task at %s", time.Now().Format(time.RFC3339))
 
 	// Step 1: Get current electricity price
-	currentPrice, err := s.getCurrentPrice(ctx)
+	currentPrice, err := s.getCurrentAvgPrice(ctx)
 	if err != nil {
 		s.logger.Printf("Error getting current price: %v", err)
 		return
 	}
 
-	s.logger.Printf("Current electricity price: %.2f EUR/MWh", currentPrice)
+	s.logger.Printf("Current hourly average electricity price: %.2f EUR/MWh", currentPrice)
 	s.logger.Printf("Price limit: %.2f EUR/MWh", s.config.PriceLimit)
 
 	// Step 2: Manage miners based on price
@@ -270,8 +270,8 @@ func (s *MinerScheduler) runMinerDiscovery(ctx context.Context) {
 	s.logger.Printf("Miner discovery task completed successfully")
 }
 
-// getCurrentPrice gets the current electricity price, downloading new data if needed
-func (s *MinerScheduler) getCurrentPrice(ctx context.Context) (float64, error) {
+// getCurrentAvgPrice gets the current hourly average electricity price, downloading new data if needed
+func (s *MinerScheduler) getCurrentAvgPrice(ctx context.Context) (float64, error) {
 	now := time.Now()
 
 	// Step 2: Try to get price from latest document
@@ -280,7 +280,7 @@ func (s *MinerScheduler) getCurrentPrice(ctx context.Context) (float64, error) {
 	s.mu.RUnlock()
 
 	if latestDoc != nil {
-		if price, found := latestDoc.LookupPriceByTime(now); found {
+		if price, found := latestDoc.LookupAveragePriceInHourByTime(now); found {
 			s.logger.Printf("Price found in cached document: %.2f EUR/MWh", price)
 			return price, nil
 		}
@@ -304,7 +304,7 @@ func (s *MinerScheduler) getCurrentPrice(ctx context.Context) (float64, error) {
 	s.logger.Printf("Successfully downloaded new PublicationMarketDocument")
 
 	// Try to get price from new document
-	if price, found := newDoc.LookupPriceByTime(now); found {
+	if price, found := newDoc.LookupAveragePriceInHourByTime(now); found {
 		s.logger.Printf("Price found in new document: %.2f EUR/MWh", price)
 		return price, nil
 	}

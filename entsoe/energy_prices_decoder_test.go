@@ -490,26 +490,6 @@ func BenchmarkGetTimeRangeForPosition(b *testing.B) {
 	}
 }
 
-func BenchmarkGetAllPricesByTime(b *testing.B) {
-	period := &Period{
-		TimeInterval: TimeInterval{
-			Start: time.Date(2025, 9, 4, 22, 0, 0, 0, time.UTC),
-			End:   time.Date(2025, 9, 5, 22, 0, 0, 0, time.UTC),
-		},
-		Resolution: time.Hour,
-		Points:     make([]Point, 24),
-	}
-
-	// Fill with sample data
-	for i := range 24 {
-		period.Points[i] = Point{Position: i + 1, PriceAmount: float64(100 + i*10)}
-	}
-
-	for b.Loop() {
-		_ = period.GetAllPricesByTime()
-	}
-}
-
 func TestCalculatePosition(t *testing.T) {
 	period := &Period{
 		TimeInterval: TimeInterval{
@@ -630,41 +610,6 @@ func TestGetTimeRangeForPosition(t *testing.T) {
 	}
 }
 
-func TestGetAllPricesByTime(t *testing.T) {
-	period := &Period{
-		TimeInterval: TimeInterval{
-			Start: time.Date(2025, 9, 4, 22, 0, 0, 0, time.UTC),
-			End:   time.Date(2025, 9, 5, 22, 0, 0, 0, time.UTC),
-		},
-		Resolution: time.Hour,
-		Points: []Point{
-			{Position: 1, PriceAmount: 100.0},
-			{Position: 2, PriceAmount: 200.0},
-			{Position: 3, PriceAmount: 300.0},
-		},
-	}
-
-	prices := period.GetAllPricesByTime()
-
-	expectedPrices := map[time.Time]float64{
-		time.Date(2025, 9, 4, 22, 0, 0, 0, time.UTC): 100.0,
-		time.Date(2025, 9, 4, 23, 0, 0, 0, time.UTC): 200.0,
-		time.Date(2025, 9, 5, 0, 0, 0, 0, time.UTC):  300.0,
-	}
-
-	if len(prices) != len(expectedPrices) {
-		t.Errorf("GetAllPricesByTime() returned %d prices, want %d", len(prices), len(expectedPrices))
-	}
-
-	for expectedTime, expectedPrice := range expectedPrices {
-		if price, found := prices[expectedTime]; !found {
-			t.Errorf("GetAllPricesByTime() missing price for time %v", expectedTime)
-		} else if price != expectedPrice {
-			t.Errorf("GetAllPricesByTime() price for time %v = %v, want %v", expectedTime, price, expectedPrice)
-		}
-	}
-}
-
 func TestDocumentDecode(t *testing.T) {
 	file, err := os.Open("../test_data/Energy_Prices_202509112200-202509122200.xml")
 	if err != nil {
@@ -684,62 +629,157 @@ func TestDocumentDecode(t *testing.T) {
 	}
 }
 
-func TestGetPriceByPosition(t *testing.T) {
-	period := &Period{
+// TestAveragePriceInHourByTime tests the averagePriceInHourByTime method on Period.
+func TestAveragePriceInHourByTime(t *testing.T) {
+	periodStart := time.Date(2023, 6, 1, 10, 0, 0, 0, time.UTC)
+	periodEnd := periodStart.Add(3 * time.Hour)
+	period := Period{
+		TimeInterval: TimeInterval{
+			Start: periodStart,
+			End:   periodEnd,
+		},
+		Resolution: time.Hour,
 		Points: []Point{
-			{Position: 1, PriceAmount: 100.0},
-			{Position: 2, PriceAmount: 200.0},
-			{Position: 5, PriceAmount: 500.0}, // Gap in positions
+			{Position: 1, PriceAmount: 10.0}, // 10:00-11:00
+			{Position: 2, PriceAmount: 20.0}, // 11:00-12:00
+			{Position: 3, PriceAmount: 30.0}, // 12:00-13:00
 		},
 	}
 
 	tests := []struct {
-		name          string
-		position      int
-		expectedPrice float64
-		shouldFind    bool
+		name      string
+		queryTime time.Time
+		expected  float64
+		found     bool
 	}{
 		{
-			name:          "existing position 1",
-			position:      1,
-			expectedPrice: 100.0,
-			shouldFind:    true,
+			name:      "Hour with one price (10:00)",
+			queryTime: time.Date(2023, 6, 1, 10, 15, 0, 0, time.UTC),
+			expected:  10.0,
+			found:     true,
 		},
 		{
-			name:          "existing position 2",
-			position:      2,
-			expectedPrice: 200.0,
-			shouldFind:    true,
+			name:      "Hour with one price (11:00)",
+			queryTime: time.Date(2023, 6, 1, 11, 30, 0, 0, time.UTC),
+			expected:  20.0,
+			found:     true,
 		},
 		{
-			name:          "existing position 5",
-			position:      5,
-			expectedPrice: 500.0,
-			shouldFind:    true,
+			name:      "Hour with one price (12:00)",
+			queryTime: time.Date(2023, 6, 1, 12, 45, 0, 0, time.UTC),
+			expected:  30.0,
+			found:     true,
 		},
 		{
-			name:          "missing position 3",
-			position:      3,
-			expectedPrice: 0,
-			shouldFind:    false,
+			name:      "Hour with no price (13:00)",
+			queryTime: time.Date(2023, 6, 1, 13, 15, 0, 0, time.UTC),
+			expected:  0.0,
+			found:     false,
 		},
 		{
-			name:          "missing position 0",
-			position:      0,
-			expectedPrice: 0,
-			shouldFind:    false,
+			name:      "Hour overlapping two intervals (custom 30-min resolution)",
+			queryTime: time.Date(2023, 6, 1, 11, 0, 0, 0, time.UTC),
+			expected:  20.0,
+			found:     true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			price, found := period.GetPriceByPosition(tt.position)
-			if found != tt.shouldFind {
-				t.Errorf("GetPriceByPosition() found = %v, want %v", found, tt.shouldFind)
+			avg, ok := period.averagePriceInHourByTime(tt.queryTime)
+			if ok != tt.found {
+				t.Errorf("expected found=%v, got %v", tt.found, ok)
 			}
-			if found && price != tt.expectedPrice {
-				t.Errorf("GetPriceByPosition() price = %v, want %v", price, tt.expectedPrice)
+			if ok && avg != tt.expected {
+				t.Errorf("expected average %.2f, got %.2f", tt.expected, avg)
 			}
 		})
 	}
+
+	// Test with multiple points in the same hour (simulate 30-min resolution)
+	period30 := Period{
+		TimeInterval: TimeInterval{
+			Start: periodStart,
+			End:   periodStart.Add(2 * time.Hour),
+		},
+		Resolution: 30 * time.Minute,
+		Points: []Point{
+			{Position: 1, PriceAmount: 10.0}, // 10:00-10:30
+			{Position: 2, PriceAmount: 14.0}, // 10:30-11:00
+			{Position: 3, PriceAmount: 20.0}, // 11:00-11:30
+			{Position: 4, PriceAmount: 22.0}, // 11:30-12:00
+		},
+	}
+
+	t.Run("Hour with two prices (10:00)", func(t *testing.T) {
+		avg, ok := period30.averagePriceInHourByTime(time.Date(2023, 6, 1, 10, 45, 0, 0, time.UTC))
+		expected := (10.0 + 14.0) / 2
+		if !ok {
+			t.Errorf("expected found=true, got false")
+		}
+		if avg != expected {
+			t.Errorf("expected average %.2f, got %.2f", expected, avg)
+		}
+	})
+
+	t.Run("Hour with two prices (11:00)", func(t *testing.T) {
+		avg, ok := period30.averagePriceInHourByTime(time.Date(2023, 6, 1, 11, 15, 0, 0, time.UTC))
+		expected := (20.0 + 22.0) / 2
+		if !ok {
+			t.Errorf("expected found=true, got false")
+		}
+		if avg != expected {
+			t.Errorf("expected average %.2f, got %.2f", expected, avg)
+		}
+	})
+
+	t.Run("Hour with no prices (12:00)", func(t *testing.T) {
+		avg, ok := period30.averagePriceInHourByTime(time.Date(2023, 6, 1, 12, 15, 0, 0, time.UTC))
+		if ok {
+			t.Errorf("expected found=false, got true")
+		}
+		if avg != 0.0 {
+			t.Errorf("expected average 0.0, got %.2f", avg)
+		}
+	})
+	// Test with 2-hour period, 15-min resolution, some duplicate PriceAmount values
+	period15 := Period{
+		TimeInterval: TimeInterval{
+			Start: periodStart,
+			End:   periodStart.Add(2 * time.Hour),
+		},
+		Resolution: 15 * time.Minute,
+		Points: []Point{
+			{Position: 1, PriceAmount: 5.0},  // 10:00-10:15
+			{Position: 2, PriceAmount: 5.0},  // 10:15-10:30
+			{Position: 3, PriceAmount: 10.0}, // 10:30-10:45
+			{Position: 4, PriceAmount: 15.0}, // 10:45-11:00
+			{Position: 5, PriceAmount: 20.0}, // 11:00-11:15
+			// {Position: 6, PriceAmount: 20.0}, // 11:15-11:30 - missed in the actual XMLs if the PriceAmount the same
+			{Position: 7, PriceAmount: 25.0}, // 11:30-11:45
+			{Position: 8, PriceAmount: 30.0}, // 11:45-12:00
+		},
+	}
+
+	t.Run("Hour with four prices, two duplicates (10:00)", func(t *testing.T) {
+		avg, ok := period15.averagePriceInHourByTime(time.Date(2023, 6, 1, 10, 30, 0, 0, time.UTC))
+		expected := (5.0 + 5.0 + 10.0 + 15.0) / 4
+		if !ok {
+			t.Errorf("expected found=true, got false")
+		}
+		if avg != expected {
+			t.Errorf("expected average %.2f, got %.2f", expected, avg)
+		}
+	})
+
+	t.Run("Hour with four prices, two duplicates (11:00)", func(t *testing.T) {
+		avg, ok := period15.averagePriceInHourByTime(time.Date(2023, 6, 1, 11, 45, 0, 0, time.UTC))
+		expected := (20.0 + 20.0 + 25.0 + 30.0) / 4
+		if !ok {
+			t.Errorf("expected found=true, got false")
+		}
+		if avg != expected {
+			t.Errorf("expected average %.2f, got %.2f", expected, avg)
+		}
+	})
 }

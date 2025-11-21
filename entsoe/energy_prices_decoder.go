@@ -325,6 +325,17 @@ func (pmd *PublicationMarketDocument) LookupPriceByTime(t time.Time) (float64, b
 	return 0, false
 }
 
+// LookupAveragePriceInHourByTime searches all TimeSeries in the document for the average price within the hour containing the given time.
+// Returns the first matching average price found and true, or 0 and false if no price is found in any TimeSeries for that hour.
+func (pmd *PublicationMarketDocument) LookupAveragePriceInHourByTime(t time.Time) (float64, bool) {
+	for _, timeSeries := range pmd.TimeSeries {
+		if avg, found := timeSeries.Period.averagePriceInHourByTime(t); found {
+			return avg, true
+		}
+	}
+	return 0, false
+}
+
 // GetPriceByTime returns the price for a specific time.
 // The price corresponds to the interval that contains the given time.
 // For example, if the period starts at 22:00 with hourly resolution:
@@ -401,30 +412,42 @@ func (p *Period) GetTimeRangeForPosition(position int) (start, end time.Time, va
 	return start, end, true
 }
 
-// GetPriceByPosition returns the price for a specific position (1-based).
-// This is the original position-based method, kept for backward compatibility.
-// Consider using GetPriceByHour(time.Time) for time-based queries.
-func (p *Period) GetPriceByPosition(position int) (float64, bool) {
-	for _, point := range p.Points {
-		if point.Position == position {
-			return point.PriceAmount, true
-		}
-	}
-	return 0, false
-}
+// averagePriceInHourByTime returns the average price for all intervals within the hour containing the given time.
+// If no intervals overlap with the hour, returns (0, false).
+func (p *Period) averagePriceInHourByTime(t time.Time) (float64, bool) {
+	// Find the hour boundaries for the given time
+	hourStart := t.Truncate(time.Hour)
+	hourEnd := hourStart.Add(time.Hour)
 
-// GetAllPricesByTime returns all prices as a map of time -> price.
-// Each key represents the start time of an interval, and the value is the price
-// for that entire interval. This provides a time-based view of all available prices.
-func (p *Period) GetAllPricesByTime() map[time.Time]float64 {
-	prices := make(map[time.Time]float64)
+	var sum float64
+	var count int
+
+	var checked *Point
+
 	for _, point := range p.Points {
-		start, _, valid := p.GetTimeRangeForPosition(point.Position)
-		if valid {
-			prices[start] = point.PriceAmount
+		start, end, valid := p.GetTimeRangeForPosition(point.Position)
+		if !valid {
+			continue
+		}
+		// Check if the interval overlaps with the hour
+		if (start.Before(hourEnd) && end.After(hourStart)) || (start.Equal(hourStart) && end.After(hourStart)) {
+			// correctly calculate average even if data point is missed when the price isn't changed
+			if checked != nil {
+				for position := checked.Position + 1; position < point.Position; position++ {
+					sum += checked.PriceAmount
+					count++
+				}
+			}
+			sum += point.PriceAmount
+			count++
+			checked = &point
 		}
 	}
-	return prices
+
+	if count == 0 {
+		return 0, false
+	}
+	return sum / float64(count), true
 }
 
 // DecodeEnergyPricesXML decodes the XML file and returns the parsed data
