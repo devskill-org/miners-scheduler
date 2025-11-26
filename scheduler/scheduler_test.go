@@ -599,7 +599,7 @@ func TestGetInitialDelay(t *testing.T) {
 			}
 			scheduler := NewMinerScheduler(config, nil)
 
-			actualDelay := scheduler.getInitialDelay(tt.now)
+			actualDelay := scheduler.getInitialDelay(tt.now, tt.priceCheckInterval)
 
 			if actualDelay != tt.expectedDelay {
 				t.Errorf("Expected delay %v, got %v", tt.expectedDelay, actualDelay)

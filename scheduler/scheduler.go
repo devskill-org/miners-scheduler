@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"sync"
@@ -9,9 +10,45 @@ import (
 
 	"github.com/devskill-org/miners-scheduler/entsoe"
 	"github.com/devskill-org/miners-scheduler/miners"
+	"github.com/devskill-org/miners-scheduler/sigenergy"
+	_ "github.com/lib/pq"
 )
 
 // MinerScheduler handles the periodic task of managing miners based on electricity prices
+
+type PVSample struct {
+	value float64
+	ts    time.Time
+}
+
+type PVSamples struct {
+	mu      sync.Mutex
+	samples []PVSample
+}
+
+func (p *PVSamples) AddSample(value float64, ts time.Time) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.samples = append(p.samples, PVSample{value: value, ts: ts})
+}
+
+func (p *PVSamples) IntegrateSamples(pollInterval time.Duration) float64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var total float64
+	for _, sample := range p.samples {
+		total += sample.value * pollInterval.Seconds() / 3600.0 // kW * sec / 3600 = kWh
+	}
+	p.samples = p.samples[:0]
+	return total
+}
+
+func (p *PVSamples) IsEmpty() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.samples) == 0
+}
+
 type MinerScheduler struct {
 	// Configuration
 	config *Config
@@ -81,11 +118,11 @@ func (s *MinerScheduler) GetDiscoveredMiners() []*miners.AvalonQHost {
 	return minersCopy
 }
 
-func (s *MinerScheduler) getInitialDelay(now time.Time) time.Duration {
+func (s *MinerScheduler) getInitialDelay(now time.Time, delayInterval time.Duration) time.Duration {
 	top := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, now.Location())
 	delay := now.Sub(top)
 	for delay > 0 {
-		delay = delay - s.GetConfig().CheckPriceInterval
+		delay = delay - delayInterval
 	}
 	return -delay
 }
@@ -119,44 +156,48 @@ func (s *MinerScheduler) Start(ctx context.Context) error {
 		s.runPriceCheck(ctx)
 	}()
 
-	// Get initial delay
-	now := time.Now()
-	initialDelay := s.getInitialDelay(now) + time.Second
-	s.logger.Printf("Schedule next check for %v", now.Add(initialDelay))
+	config := s.GetConfig()
 
-	// Start the periodic tickers for price checking, state checking, and miner discovery
-	priceCheckTicker := time.NewTicker(s.config.CheckPriceInterval)
-	defer priceCheckTicker.Stop()
-
-	stateCheckTicker := time.NewTicker(s.config.MinersStateCheckInterval)
-	defer stateCheckTicker.Stop()
-
-	minerDiscoveryTicker := time.NewTicker(s.config.MinerDiscoveryInterval)
-	defer minerDiscoveryTicker.Stop()
-
-	initialDelayTick := time.After(initialDelay)
-
-Loop:
-	for {
-		select {
-		case <-ctx.Done():
-			s.logger.Printf("Scheduler stopping due to context cancellation")
-			s.stop()
-			return ctx.Err()
-		case <-s.stopChan:
-			s.logger.Printf("Scheduler stopping due to stop signal")
-			return nil
-		case <-initialDelayTick:
-			go s.runPriceCheck(ctx)
-			priceCheckTicker.Reset(s.GetConfig().CheckPriceInterval)
-			break Loop
-		case <-stateCheckTicker.C:
-			go s.runStateCheck(ctx)
-		case <-minerDiscoveryTicker.C:
-			go s.runMinerDiscovery(ctx)
+	// PV integration state
+	pvSamples := &PVSamples{}
+	var pvDB *sql.DB
+	var pvDBErr error
+	if s.config.PostgresConnString != "" {
+		pvDB, pvDBErr = sql.Open("postgres", s.config.PostgresConnString)
+		if pvDBErr != nil {
+			s.logger.Printf("PV integration: failed to connect to DB: %v", pvDBErr)
+			pvDB = nil
 		}
 	}
 
+	// Get initial delays
+	now := time.Now()
+	minersControlInitialDelay := s.getInitialDelay(now, config.CheckPriceInterval) + time.Second
+	pvDataInitialDelay := s.getInitialDelay(now, config.PVIntegrationPeriod)
+	s.logger.Printf("Schedule next miners check for %v", now.Add(minersControlInitialDelay))
+	s.logger.Printf("Schedule next PV data collection for %v", now.Add(pvDataInitialDelay))
+
+	pvTicker := time.NewTicker(config.PVPollInterval)
+	defer pvTicker.Stop()
+
+	pvResetTicker := time.NewTicker(config.PVIntegrationPeriod)
+	defer pvResetTicker.Stop()
+
+	priceCheckTicker := time.NewTicker(config.CheckPriceInterval)
+	defer priceCheckTicker.Stop()
+
+	stateCheckTicker := time.NewTicker(config.MinersStateCheckInterval)
+	defer stateCheckTicker.Stop()
+
+	minerDiscoveryTicker := time.NewTicker(config.MinerDiscoveryInterval)
+	defer minerDiscoveryTicker.Stop()
+
+	minersControlInitialDelayTick := time.After(minersControlInitialDelay)
+	minersControlInitialDelayPassed := false
+
+	pvDataInitialDelayTick := time.After(pvDataInitialDelay)
+	pvDataInitialDelayPassed := false
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -166,12 +207,69 @@ Loop:
 		case <-s.stopChan:
 			s.logger.Printf("Scheduler stopping due to stop signal")
 			return nil
-		case <-priceCheckTicker.C:
+		case <-minersControlInitialDelayTick:
 			go s.runPriceCheck(ctx)
+			priceCheckTicker.Reset(config.CheckPriceInterval)
+			minersControlInitialDelayPassed = true
+		case <-pvDataInitialDelayTick:
+			go s.runPVPoll(pvSamples)
+			pvTicker.Reset(config.PVPollInterval)
+			pvResetTicker.Reset(config.PVIntegrationPeriod)
+			pvDataInitialDelayPassed = true
+		case <-priceCheckTicker.C:
+			if minersControlInitialDelayPassed {
+				go s.runPriceCheck(ctx)
+			}
 		case <-stateCheckTicker.C:
 			go s.runStateCheck(ctx)
 		case <-minerDiscoveryTicker.C:
 			go s.runMinerDiscovery(ctx)
+		case <-pvTicker.C:
+			if pvDataInitialDelayPassed {
+				go s.runPVPoll(pvSamples)
+			}
+		case <-pvResetTicker.C:
+			if pvDataInitialDelayPassed {
+				go s.runPVIntegration(pvSamples, config.PVPollInterval, pvDB, config.DeviceID)
+			}
+		}
+	}
+}
+
+func (s *MinerScheduler) runPVPoll(samples *PVSamples) {
+	if s.config.PlantModbusIP == "" {
+		return
+	}
+	client, err := sigenergy.NewTCPClient(s.config.PlantModbusIP, sigenergy.PlantAddress)
+	if err != nil {
+		s.logger.Printf("PV integration: failed to create modbus client: %v", err)
+		return
+	}
+	defer client.Close()
+	info, err := client.ReadPlantRunningInfo()
+	if err != nil {
+		s.logger.Printf("PV integration: failed to read PlantRunningInfo: %v", err)
+		return
+	}
+	samples.AddSample(info.PhotovoltaicPower, time.Now())
+}
+
+func (s *MinerScheduler) runPVIntegration(samples *PVSamples, pollInterval time.Duration, pvDB *sql.DB, deviceID int) {
+	if samples.IsEmpty() {
+		s.logger.Printf("PV integration: no samples collected in period")
+		return
+	}
+	total := samples.IntegrateSamples(pollInterval)
+	timestamp := time.Now()
+	if pvDB != nil {
+		_, err := pvDB.Exec(
+			`INSERT INTO metrics (timestamp, device_id, metric_name, value) VALUES ($1, $2, $3, $4)`,
+			timestamp, deviceID, "pv_total_power", total,
+		)
+		if err != nil {
+			s.logger.Printf("PV integration: failed to insert metric: %v", err)
+		} else {
+			s.logger.Printf("PV integration: saved %.3f kWh for device_id=%d at %s", total, deviceID, timestamp.Format(time.RFC3339))
 		}
 	}
 }

@@ -1,9 +1,8 @@
-package main
+package sigenergy
 
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/goburrow/modbus"
@@ -532,103 +531,4 @@ func (c *SigenModbusClient) SetACChargerOutputCurrent(slaveID byte, current floa
 	value := uint32(current * 100)
 	_, err := c.client.WriteMultipleRegisters(42001, 2, u32ToBytes(value))
 	return err
-}
-
-// Example usage
-func main() {
-	// Example 1: TCP connection
-	client, err := NewTCPClient("192.168.1.100:502", PlantAddress)
-	if err != nil {
-		log.Fatalf("Failed to create TCP client: %v", err)
-	}
-	defer client.Close()
-
-	// Example 2: RTU connection (uncomment to use)
-	// client, err := NewRTUClient("/dev/ttyUSB0", 9600, PlantAddress)
-	// if err != nil {
-	// 	log.Fatalf("Failed to create RTU client: %v", err)
-	// }
-	// defer client.Close()
-
-	// Read plant running information
-	plantInfo, err := client.ReadPlantRunningInfo()
-	if err != nil {
-		log.Printf("Failed to read plant info: %v", err)
-	} else {
-		fmt.Printf("=== Plant Running Information ===\n")
-		fmt.Printf("EMS Work Mode: %d\n", plantInfo.EMSWorkMode)
-		fmt.Printf("Plant Active Power: %.2f kW\n", plantInfo.PlantActivePower)
-		fmt.Printf("Plant Reactive Power: %.2f kVar\n", plantInfo.PlantReactivePower)
-		fmt.Printf("PV Power: %.2f kW\n", plantInfo.PhotovoltaicPower)
-		fmt.Printf("ESS Power: %.2f kW\n", plantInfo.ESSPower)
-		fmt.Printf("ESS SOC: %.1f%%\n", plantInfo.ESSSOC)
-		fmt.Printf("Grid Sensor Active Power: %.2f kW\n", plantInfo.GridSensorActivePower)
-		fmt.Printf("Running State: %d\n", plantInfo.PlantRunningState)
-		fmt.Println()
-	}
-
-	// Read inverter information (slave ID 1)
-	inverterInfo, err := client.ReadHybridInverterInfo(1)
-	if err != nil {
-		log.Printf("Failed to read inverter info: %v", err)
-	} else {
-		fmt.Printf("=== Inverter #1 Information ===\n")
-		fmt.Printf("Rated Active Power: %.2f kW\n", inverterInfo.RatedActivePower)
-		fmt.Printf("Active Power: %.2f kW\n", inverterInfo.ActivePower)
-		fmt.Printf("Reactive Power: %.2f kVar\n", inverterInfo.ReactivePower)
-		fmt.Printf("PV Power: %.2f kW\n", inverterInfo.PVPower)
-		fmt.Printf("ESS SOC: %.1f%%\n", inverterInfo.ESS_SOC)
-		fmt.Printf("ESS SOH: %.1f%%\n", inverterInfo.ESS_SOH)
-		fmt.Printf("Grid Frequency: %.2f Hz\n", inverterInfo.GridFrequency)
-		fmt.Printf("Phase A Voltage: %.2f V\n", inverterInfo.PhaseAVoltage)
-		fmt.Printf("Phase A Current: %.2f A\n", inverterInfo.PhaseACurrent)
-		fmt.Printf("Power Factor: %.3f\n", inverterInfo.PowerFactor)
-		fmt.Printf("Running State: %d\n", inverterInfo.RunningState)
-		fmt.Println()
-	}
-
-	// Example: Control operations
-	fmt.Println("=== Control Examples ===")
-
-	// Enable remote EMS control
-	err = client.EnableRemoteEMS(true)
-	if err != nil {
-		log.Printf("Failed to enable remote EMS: %v", err)
-	} else {
-		fmt.Println("Remote EMS enabled")
-	}
-
-	// Set remote EMS to maximum self-consumption mode
-	err = client.SetRemoteEMSMode(2)
-	if err != nil {
-		log.Printf("Failed to set EMS mode: %v", err)
-	} else {
-		fmt.Println("EMS mode set to maximum self-consumption")
-	}
-
-	// Set active power to 5 kW
-	err = client.SetActivePowerFixed(5.0)
-	if err != nil {
-		log.Printf("Failed to set active power: %v", err)
-	} else {
-		fmt.Println("Active power set to 5.0 kW")
-	}
-
-	// Set power factor to 0.95
-	err = client.SetPowerFactor(0.95)
-	if err != nil {
-		log.Printf("Failed to set power factor: %v", err)
-	} else {
-		fmt.Println("Power factor set to 0.95")
-	}
-
-	// Set ESS max charging limit to 10 kW
-	err = client.SetESSMaxChargingLimit(10.0)
-	if err != nil {
-		log.Printf("Failed to set ESS charging limit: %v", err)
-	} else {
-		fmt.Println("ESS max charging limit set to 10.0 kW")
-	}
-
-	fmt.Println("\nDone!")
 }

@@ -14,5 +14,10 @@
   "fanr_high_threshold": 70,
   "fanr_low_threshold": 50,
   "url_format": "https://web-api.tp.entsoe.eu/api?documentType=A44&out_Domain=10YLV-1001A00074&in_Domain=10YLV-1001A00074&periodStart=%s&periodEnd=%s&securityToken=%s",
-  "location": "CET"
+  "location": "CET",
+  "plant_modbus_ip": "192.168.1.100:502",
+  "device_id": 0,
+  "pv_poll_interval": "10s",
+  "pv_integration_period": "15m",
+  "postgres_conn_string": "<your-neon-connection-string>"
 }

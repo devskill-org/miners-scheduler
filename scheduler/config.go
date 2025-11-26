@@ -39,6 +39,15 @@ type Config struct {
 	// FanR thresholds for work mode switching
 	FanRHighThreshold int `json:"fanr_high_threshold"` // FanR threshold to decrease work mode
 	FanRLowThreshold  int `json:"fanr_low_threshold"`  // FanR threshold to increase work mode
+
+	// Plant Modbus server
+	PlantModbusIP string `json:"plant_modbus_ip"` // IP address of Plant Modbus server
+
+	// PV metrics integration
+	DeviceID            int           `json:"device_id"`             // Device ID for metrics table
+	PVPollInterval      time.Duration `json:"pv_poll_interval"`      // Poll interval for PV power (duration)
+	PVIntegrationPeriod time.Duration `json:"pv_integration_period"` // Integration period for PV power (duration)
+	PostgresConnString  string        `json:"postgres_conn_string"`  // PostgreSQL connection string
 }
 
 // DefaultConfig returns a configuration with default values
@@ -55,7 +64,12 @@ func DefaultConfig() *Config {
 		LogFormat:                "text",
 		MinerTimeout:             5 * time.Second,
 		HealthCheckPort:          0,
+		DeviceID:                 0,
+		PVPollInterval:           10 * time.Second,
+		PVIntegrationPeriod:      15 * time.Minute,
+		PostgresConnString:       "",
 		UrlFormat:                "https://web-api.tp.entsoe.eu/api?documentType=A44&out_Domain=10YLV-1001A00074&in_Domain=10YLV-1001A00074&periodStart=%s&periodEnd=%s&securityToken=%s",
+		PlantModbusIP:            "",
 	}
 }
 
@@ -180,6 +194,8 @@ func (c *Config) MarshalJSON() ([]byte, error) {
 		MinerDiscoveryInterval   string `json:"miner_discovery_interval"`
 		APITimeout               string `json:"api_timeout"`
 		MinerTimeout             string `json:"miner_timeout"`
+		PVPollInterval           string `json:"pv_poll_interval"`
+		PVIntegrationPeriod      string `json:"pv_integration_period"`
 	}{
 		Alias:                    (*Alias)(c),
 		CheckInterval:            c.CheckPriceInterval.String(),
@@ -187,6 +203,8 @@ func (c *Config) MarshalJSON() ([]byte, error) {
 		MinerDiscoveryInterval:   c.MinerDiscoveryInterval.String(),
 		APITimeout:               c.APITimeout.String(),
 		MinerTimeout:             c.MinerTimeout.String(),
+		PVPollInterval:           c.PVPollInterval.String(),
+		PVIntegrationPeriod:      c.PVIntegrationPeriod.String(),
 	})
 }
 
@@ -201,6 +219,8 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		APITimeout               string `json:"api_timeout"`
 		MinerTimeout             string `json:"miner_timeout"`
 		UrlFormat                string `json:"url_format"`
+		PVPollInterval           string `json:"pv_poll_interval"`
+		PVIntegrationPeriod      string `json:"pv_integration_period"`
 	}{
 		Alias: (*Alias)(c),
 	}
@@ -240,6 +260,16 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		}
 	}
 
+	if aux.PVPollInterval != "" {
+		if c.PVPollInterval, err = time.ParseDuration(aux.PVPollInterval); err != nil {
+			return fmt.Errorf("invalid pv_poll_interval: %w", err)
+		}
+	}
+	if aux.PVIntegrationPeriod != "" {
+		if c.PVIntegrationPeriod, err = time.ParseDuration(aux.PVIntegrationPeriod); err != nil {
+			return fmt.Errorf("invalid pv_integration_period: %w", err)
+		}
+	}
 	if aux.UrlFormat != "" {
 		c.UrlFormat = aux.UrlFormat
 	}
