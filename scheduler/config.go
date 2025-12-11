@@ -48,6 +48,12 @@ type Config struct {
 	PVPollInterval      time.Duration `json:"pv_poll_interval"`      // Poll interval for PV power (duration)
 	PVIntegrationPeriod time.Duration `json:"pv_integration_period"` // Integration period for PV power (duration)
 	PostgresConnString  string        `json:"postgres_conn_string"`  // PostgreSQL connection string
+
+	// Weather API settings
+	WeatherUpdateInterval time.Duration `json:"weather_update_interval"` // How often to update weather
+	Latitude              float64       `json:"latitude"`                // Latitude for weather data
+	Longitude             float64       `json:"longitude"`               // Longitude for weather data
+	UserAgent             string        `json:"user_agent"`              // User agent for weather API client
 }
 
 // DefaultConfig returns a configuration with default values
@@ -70,6 +76,10 @@ func DefaultConfig() *Config {
 		PostgresConnString:       "",
 		UrlFormat:                "https://web-api.tp.entsoe.eu/api?documentType=A44&out_Domain=10YLV-1001A00074&in_Domain=10YLV-1001A00074&periodStart=%s&periodEnd=%s&securityToken=%s",
 		PlantModbusIP:            "",
+		Latitude:                 56.9496, // Riga, Latvia
+		Longitude:                24.1052, // Riga, Latvia
+		WeatherUpdateInterval:    1 * time.Hour,
+		UserAgent:                "MyApp/1.0 (username@example.com)",
 	}
 }
 
@@ -137,6 +147,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("check_price_interval must be greater than 0, got: %s", c.CheckPriceInterval)
 	}
 
+	if c.WeatherUpdateInterval <= 0 {
+		return fmt.Errorf("weather_update_interval must be greater than 0, got: %s", c.WeatherUpdateInterval)
+	}
+
 	if c.MinersStateCheckInterval <= 0 {
 		return fmt.Errorf("miners_state_check_interval must be greater than 0, got: %s", c.MinersStateCheckInterval)
 	}
@@ -181,6 +195,21 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid log_format: %s, must be one of: text, json", c.LogFormat)
 	}
 
+	// Validate latitude
+	if c.Latitude < -90 || c.Latitude > 90 {
+		return fmt.Errorf("latitude must be between -90 and 90, got: %f", c.Latitude)
+	}
+
+	// Validate longitude
+	if c.Longitude < -180 || c.Longitude > 180 {
+		return fmt.Errorf("longitude must be between -180 and 180, got: %f", c.Longitude)
+	}
+
+	// Validate user agent
+	if c.UserAgent == "" {
+		return fmt.Errorf("user_agent cannot be empty")
+	}
+
 	return nil
 }
 
@@ -196,6 +225,7 @@ func (c *Config) MarshalJSON() ([]byte, error) {
 		MinerTimeout             string `json:"miner_timeout"`
 		PVPollInterval           string `json:"pv_poll_interval"`
 		PVIntegrationPeriod      string `json:"pv_integration_period"`
+		WeatherUpdateInterval    string `json:"weather_update_interval"`
 	}{
 		Alias:                    (*Alias)(c),
 		CheckInterval:            c.CheckPriceInterval.String(),
@@ -205,6 +235,7 @@ func (c *Config) MarshalJSON() ([]byte, error) {
 		MinerTimeout:             c.MinerTimeout.String(),
 		PVPollInterval:           c.PVPollInterval.String(),
 		PVIntegrationPeriod:      c.PVIntegrationPeriod.String(),
+		WeatherUpdateInterval:    c.WeatherUpdateInterval.String(),
 	})
 }
 
@@ -221,6 +252,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		UrlFormat                string `json:"url_format"`
 		PVPollInterval           string `json:"pv_poll_interval"`
 		PVIntegrationPeriod      string `json:"pv_integration_period"`
+		WeatherUpdateInterval    string `json:"weather_update_interval"`
 	}{
 		Alias: (*Alias)(c),
 	}
@@ -233,6 +265,12 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	if aux.CheckPriceInterval != "" {
 		if c.CheckPriceInterval, err = time.ParseDuration(aux.CheckPriceInterval); err != nil {
 			return fmt.Errorf("invalid check_price_interval: %w", err)
+		}
+	}
+
+	if aux.WeatherUpdateInterval != "" {
+		if c.WeatherUpdateInterval, err = time.ParseDuration(aux.WeatherUpdateInterval); err != nil {
+			return fmt.Errorf("invalid weather_update_interval: %w", err)
 		}
 	}
 
