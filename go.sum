@@ -4,3 +4,5 @@ github.com/goburrow/serial v0.1.0 h1:v2T1SQa/dlUqQiYIT8+Cu7YolfqAi3K96UmhwYyuSrA
 github.com/goburrow/serial v0.1.0/go.mod h1:sAiqG0nRVswsm1C97xsttiYCzSLBmUZ/VSlVLZJ8haA=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
+github.com/sixdouglas/suncalc v0.0.0-20250114185126-291b1938b70c h1:Lyrtmwq1VO3vK30KXmA4S4u816l/HqyT11d75WR0UiU=
+github.com/sixdouglas/suncalc v0.0.0-20250114185126-291b1938b70c/go.mod h1:IxOCrQX3pAL52wPiWuamnWxGcuyWANPyQfwcRb0iDqc=
