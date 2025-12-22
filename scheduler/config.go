@@ -54,6 +54,23 @@ type Config struct {
 	Latitude              float64       `json:"latitude"`                // Latitude for weather data
 	Longitude             float64       `json:"longitude"`               // Longitude for weather data
 	UserAgent             string        `json:"user_agent"`              // User agent for weather API client
+
+	// Battery/Inverter system configuration (MPC)
+	BatteryCapacity        float64 `json:"battery_capacity"`         // kWh
+	BatteryMaxCharge       float64 `json:"battery_max_charge"`       // kW
+	BatteryMaxDischarge    float64 `json:"battery_max_discharge"`    // kW
+	BatteryMinSOC          float64 `json:"battery_min_soc"`          // percentage (0-1)
+	BatteryMaxSOC          float64 `json:"battery_max_soc"`          // percentage (0-1)
+	BatteryEfficiency      float64 `json:"battery_efficiency"`       // round-trip efficiency (0-1)
+	BatteryDegradationCost float64 `json:"battery_degradation_cost"` // $/kWh cycled
+	MaxGridImport          float64 `json:"max_grid_import"`          // kW
+	MaxGridExport          float64 `json:"max_grid_export"`          // kW
+	MaxSolarPower          float64 `json:"max_solar_power"`          // kW - peak solar power capacity
+
+	// Price adjustments
+	ImportPriceOperatorFee float64 `json:"import_price_operator_fee"` // EUR/MWh - Operator fee for import
+	ImportPriceDeliveryFee float64 `json:"import_price_delivery_fee"` // EUR/MWh - Delivery fee for import
+	ExportPriceOperatorFee float64 `json:"export_price_operator_fee"` // EUR/MWh - Operator fee for export (subtracted)
 }
 
 // DefaultConfig returns a configuration with default values
@@ -80,6 +97,19 @@ func DefaultConfig() *Config {
 		Longitude:                24.1052, // Riga, Latvia
 		WeatherUpdateInterval:    1 * time.Hour,
 		UserAgent:                "MyApp/1.0 (username@example.com)",
+		BatteryCapacity:          24.0, // 24 kWh
+		BatteryMaxCharge:         12.0, // 12 kW
+		BatteryMaxDischarge:      12.0, // 12 kW
+		BatteryMinSOC:            0.0,  // 0%
+		BatteryMaxSOC:            1.0,  // 100%
+		BatteryEfficiency:        0.92, // 92% round-trip
+		BatteryDegradationCost:   0.05, // $0.05 per kWh cycled
+		MaxGridImport:            30.0, // 30 kW
+		MaxGridExport:            30.0, // 30 kW
+		MaxSolarPower:            30.0, // 30 kW peak solar power
+		ImportPriceOperatorFee:   8.5,  // 8.5 EUR/MWh from Operator
+		ImportPriceDeliveryFee:   40.0, // 40 EUR/MWh for delivery
+		ExportPriceOperatorFee:   17.0, // 17 EUR/MWh from Operator
 	}
 }
 
@@ -208,6 +238,64 @@ func (c *Config) Validate() error {
 	// Validate user agent
 	if c.UserAgent == "" {
 		return fmt.Errorf("user_agent cannot be empty")
+	}
+
+	// Validate battery configuration
+	if c.BatteryCapacity < 0 {
+		return fmt.Errorf("battery_capacity must be non-negative, got: %f", c.BatteryCapacity)
+	}
+
+	if c.BatteryMaxCharge < 0 {
+		return fmt.Errorf("battery_max_charge must be non-negative, got: %f", c.BatteryMaxCharge)
+	}
+
+	if c.BatteryMaxDischarge < 0 {
+		return fmt.Errorf("battery_max_discharge must be non-negative, got: %f", c.BatteryMaxDischarge)
+	}
+
+	if c.BatteryMinSOC < 0 || c.BatteryMinSOC > 1 {
+		return fmt.Errorf("battery_min_soc must be between 0 and 1, got: %f", c.BatteryMinSOC)
+	}
+
+	if c.BatteryMaxSOC < 0 || c.BatteryMaxSOC > 1 {
+		return fmt.Errorf("battery_max_soc must be between 0 and 1, got: %f", c.BatteryMaxSOC)
+	}
+
+	if c.BatteryMinSOC > c.BatteryMaxSOC {
+		return fmt.Errorf("battery_min_soc (%f) cannot be greater than battery_max_soc (%f)", c.BatteryMinSOC, c.BatteryMaxSOC)
+	}
+
+	if c.BatteryEfficiency < 0 || c.BatteryEfficiency > 1 {
+		return fmt.Errorf("battery_efficiency must be between 0 and 1, got: %f", c.BatteryEfficiency)
+	}
+
+	if c.BatteryDegradationCost < 0 {
+		return fmt.Errorf("battery_degradation_cost must be non-negative, got: %f", c.BatteryDegradationCost)
+	}
+
+	if c.MaxGridImport < 0 {
+		return fmt.Errorf("max_grid_import must be non-negative, got: %f", c.MaxGridImport)
+	}
+
+	if c.MaxGridExport < 0 {
+		return fmt.Errorf("max_grid_export must be non-negative, got: %f", c.MaxGridExport)
+	}
+
+	if c.MaxSolarPower < 0 {
+		return fmt.Errorf("max_solar_power must be non-negative, got: %f", c.MaxSolarPower)
+	}
+
+	// Validate price adjustments
+	if c.ImportPriceOperatorFee < 0 {
+		return fmt.Errorf("import_price_operator_fee must be non-negative, got: %f", c.ImportPriceOperatorFee)
+	}
+
+	if c.ImportPriceDeliveryFee < 0 {
+		return fmt.Errorf("import_price_delivery_fee must be non-negative, got: %f", c.ImportPriceDeliveryFee)
+	}
+
+	if c.ExportPriceOperatorFee < 0 {
+		return fmt.Errorf("export_price_operator_fee must be non-negative, got: %f", c.ExportPriceOperatorFee)
 	}
 
 	return nil

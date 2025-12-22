@@ -124,6 +124,7 @@ func (s *MinerScheduler) Start(ctx context.Context) error {
 	go func() {
 		s.runMinerDiscovery(ctx)
 		s.runPriceCheck(ctx)
+		s.runMPCOptimize(ctx)
 	}()
 
 	config := s.GetConfig()
@@ -179,6 +180,7 @@ func (s *MinerScheduler) Start(ctx context.Context) error {
 			return nil
 		case <-minersControlInitialDelayTick:
 			go s.runPriceCheck(ctx)
+			go s.runMPCOptimize(ctx)
 			priceCheckTicker.Reset(config.CheckPriceInterval)
 			minersControlInitialDelayPassed = true
 		case <-pvDataInitialDelayTick:
@@ -189,6 +191,7 @@ func (s *MinerScheduler) Start(ctx context.Context) error {
 		case <-priceCheckTicker.C:
 			if minersControlInitialDelayPassed {
 				go s.runPriceCheck(ctx)
+				go s.runMPCOptimize(ctx)
 			}
 		case <-stateCheckTicker.C:
 			go s.runStateCheck(ctx)

@@ -19,5 +19,18 @@
   "device_id": 0,
   "pv_poll_interval": "10s",
   "pv_integration_period": "15m",
-  "postgres_conn_string": "<your-neon-connection-string>"
+  "postgres_conn_string": "<your-neon-connection-string>",
+  "battery_capacity": 24.0,
+  "battery_max_charge": 12.0,
+  "battery_max_discharge": 12.0,
+  "battery_min_soc": 0.0,
+  "battery_max_soc": 1.0,
+  "battery_efficiency": 0.92,
+  "battery_degradation_cost": 0.05,
+  "max_grid_import": 30.0,
+  "max_grid_export": 30.0,
+  "max_solar_power": 30.0,
+  "import_price_operator_fee": 8.5,
+  "import_price_delivery_fee": 40.0,
+  "export_price_operator_fee": 17.0
 }

@@ -1,0 +1,279 @@
+package mpc
+
+import (
+	"math"
+)
+
+// SystemConfig holds the inverter system configuration
+type SystemConfig struct {
+	BatteryCapacity        float64 // kWh
+	BatteryMaxCharge       float64 // kW
+	BatteryMaxDischarge    float64 // kW
+	BatteryMinSOC          float64 // percentage (0-1)
+	BatteryMaxSOC          float64 // percentage (0-1)
+	BatteryEfficiency      float64 // round-trip efficiency (0-1)
+	BatteryDegradationCost float64 // $/kWh cycled
+	MaxGridImport          float64 // kW
+	MaxGridExport          float64 // kW
+}
+
+// TimeSlot represents one hour of operation
+type TimeSlot struct {
+	Hour          int
+	ImportPrice   float64 // $/kWh
+	ExportPrice   float64 // $/kWh
+	SolarForecast float64 // kW average for the hour
+	LoadForecast  float64 // kW average for the hour
+}
+
+// ControlDecision represents the optimal control for one time slot
+type ControlDecision struct {
+	Hour             int
+	BatteryCharge    float64 // kW (positive = charging)
+	BatteryDischarge float64 // kW (positive = discharging)
+	GridImport       float64 // kW (positive = importing)
+	GridExport       float64 // kW (positive = exporting)
+	BatterySOC       float64 // percentage (0-1)
+	Profit           float64 // $ for this hour
+}
+
+// MPCController implements Model Predictive Control
+type MPCController struct {
+	Config     SystemConfig
+	Horizon    int // hours to look ahead
+	CurrentSOC float64
+}
+
+// NewMPCController creates a new MPC controller
+func NewMPCController(config SystemConfig, horizon int, initialSOC float64) *MPCController {
+	return &MPCController{
+		Config:     config,
+		Horizon:    horizon,
+		CurrentSOC: initialSOC,
+	}
+}
+
+// Optimize finds the optimal control strategy using dynamic programming
+func (mpc *MPCController) Optimize(forecast []TimeSlot) []ControlDecision {
+	if len(forecast) == 0 {
+		return nil
+	}
+
+	// Use dynamic programming for optimization
+	// State: SOC level, Time: hour
+	// We'll discretize SOC into steps for tractability
+	socSteps := 20
+	socStep := (mpc.Config.BatteryMaxSOC - mpc.Config.BatteryMinSOC) / float64(socSteps)
+
+	// DP table: [time][soc_index] -> (best_profit, best_decision)
+	type dpState struct {
+		profit   float64
+		decision ControlDecision
+		prevSOC  int
+	}
+
+	dp := make([][]dpState, len(forecast)+1)
+	for i := range dp {
+		dp[i] = make([]dpState, socSteps+1)
+		for j := range dp[i] {
+			dp[i][j].profit = math.Inf(-1)
+		}
+	}
+
+	// Initialize with current SOC
+	startSOCIndex := mpc.socToIndex(mpc.CurrentSOC, socStep)
+	dp[0][startSOCIndex].profit = 0
+
+	// Forward pass - build DP table
+	for t := range forecast {
+		slot := forecast[t]
+
+		for socIdx := 0; socIdx <= socSteps; socIdx++ {
+			if math.IsInf(dp[t][socIdx].profit, -1) {
+				continue
+			}
+
+			currentSOC := mpc.indexToSOC(socIdx, socStep)
+
+			// Try different control decisions
+			decisions := mpc.generateFeasibleDecisions(currentSOC, slot)
+
+			for _, dec := range decisions {
+				newSOC := mpc.calculateNewSOC(currentSOC, dec.BatteryCharge, dec.BatteryDischarge)
+				newSOCIdx := mpc.socToIndex(newSOC, socStep)
+
+				if newSOCIdx < 0 || newSOCIdx > socSteps {
+					continue
+				}
+
+				profit := mpc.calculateProfit(dec, slot)
+				totalProfit := dp[t][socIdx].profit + profit
+
+				if totalProfit > dp[t+1][newSOCIdx].profit {
+					dp[t+1][newSOCIdx].profit = totalProfit
+					dp[t+1][newSOCIdx].decision = dec
+					dp[t+1][newSOCIdx].decision.BatterySOC = newSOC
+					dp[t+1][newSOCIdx].decision.Profit = profit
+					dp[t+1][newSOCIdx].prevSOC = socIdx
+				}
+			}
+		}
+	}
+
+	// Backward pass - reconstruct optimal path
+	bestFinalSOC := 0
+	bestFinalProfit := math.Inf(-1)
+	for socIdx := 0; socIdx <= socSteps; socIdx++ {
+		if dp[len(forecast)][socIdx].profit > bestFinalProfit {
+			bestFinalProfit = dp[len(forecast)][socIdx].profit
+			bestFinalSOC = socIdx
+		}
+	}
+
+	// Trace back the path
+	path := make([]ControlDecision, len(forecast))
+	currentIdx := bestFinalSOC
+	for t := len(forecast) - 1; t >= 0; t-- {
+		path[t] = dp[t+1][currentIdx].decision
+		currentIdx = dp[t+1][currentIdx].prevSOC
+	}
+
+	return path
+}
+
+// generateFeasibleDecisions creates a set of feasible control decisions
+func (mpc *MPCController) generateFeasibleDecisions(currentSOC float64, slot TimeSlot) []ControlDecision {
+	decisions := []ControlDecision{}
+
+	// Discretize battery actions (charge, discharge, idle)
+	batteryActions := []struct {
+		charge    float64
+		discharge float64
+	}{
+		{0, 0}, // Idle
+	}
+
+	// Add charge options
+	for i := 1; i <= 5; i++ {
+		charge := float64(i) * mpc.Config.BatteryMaxCharge / 5.0
+		if mpc.canCharge(currentSOC, charge) {
+			batteryActions = append(batteryActions, struct {
+				charge    float64
+				discharge float64
+			}{charge, 0})
+		}
+	}
+
+	// Add discharge options
+	for i := 1; i <= 5; i++ {
+		discharge := float64(i) * mpc.Config.BatteryMaxDischarge / 5.0
+		if mpc.canDischarge(currentSOC, discharge) {
+			batteryActions = append(batteryActions, struct {
+				charge    float64
+				discharge float64
+			}{0, discharge})
+		}
+	}
+
+	// For each battery action, calculate power balance
+	for _, action := range batteryActions {
+		dec := ControlDecision{
+			Hour:             slot.Hour,
+			BatteryCharge:    action.charge,
+			BatteryDischarge: action.discharge,
+		}
+
+		// Power balance: Solar + GridImport + BatteryDischarge = Load + GridExport + BatteryCharge
+		netSolar := slot.SolarForecast
+		netLoad := slot.LoadForecast + action.charge/mpc.Config.BatteryEfficiency
+		netSupply := netSolar + action.discharge*mpc.Config.BatteryEfficiency
+
+		balance := netSupply - netLoad
+
+		if balance > 0 {
+			// Excess power - can export
+			dec.GridExport = math.Min(balance, mpc.Config.MaxGridExport)
+			dec.GridImport = 0
+		} else {
+			// Deficit - need to import
+			dec.GridImport = math.Min(-balance, mpc.Config.MaxGridImport)
+			dec.GridExport = 0
+		}
+
+		// Check if decision is feasible
+		if mpc.isFeasible(dec) {
+			decisions = append(decisions, dec)
+		}
+	}
+
+	return decisions
+}
+
+// calculateProfit computes the profit for a decision
+func (mpc *MPCController) calculateProfit(dec ControlDecision, slot TimeSlot) float64 {
+	revenue := dec.GridExport * slot.ExportPrice
+	cost := dec.GridImport * slot.ImportPrice
+
+	// Battery degradation cost
+	batteryThroughput := dec.BatteryCharge + dec.BatteryDischarge
+	degradationCost := batteryThroughput * mpc.Config.BatteryDegradationCost
+
+	return revenue - cost - degradationCost
+}
+
+// Helper functions
+func (mpc *MPCController) canCharge(soc, charge float64) bool {
+	newSOC := soc + (charge / mpc.Config.BatteryCapacity)
+	return newSOC <= mpc.Config.BatteryMaxSOC
+}
+
+func (mpc *MPCController) canDischarge(soc, discharge float64) bool {
+	newSOC := soc - (discharge / mpc.Config.BatteryCapacity)
+	return newSOC >= mpc.Config.BatteryMinSOC
+}
+
+func (mpc *MPCController) calculateNewSOC(currentSOC, charge, discharge float64) float64 {
+	chargeEnergy := charge * mpc.Config.BatteryEfficiency
+	socChange := (chargeEnergy - discharge) / mpc.Config.BatteryCapacity
+	newSOC := currentSOC + socChange
+	return math.Max(mpc.Config.BatteryMinSOC, math.Min(mpc.Config.BatteryMaxSOC, newSOC))
+}
+
+func (mpc *MPCController) socToIndex(soc float64, socStep float64) int {
+	return int(math.Round((soc - mpc.Config.BatteryMinSOC) / socStep))
+}
+
+func (mpc *MPCController) indexToSOC(index int, socStep float64) float64 {
+	return mpc.Config.BatteryMinSOC + float64(index)*socStep
+}
+
+func (mpc *MPCController) isFeasible(dec ControlDecision) bool {
+	// Check all constraints are satisfied
+	if dec.BatteryCharge > mpc.Config.BatteryMaxCharge {
+		return false
+	}
+	if dec.BatteryDischarge > mpc.Config.BatteryMaxDischarge {
+		return false
+	}
+	if dec.GridImport > mpc.Config.MaxGridImport {
+		return false
+	}
+	if dec.GridExport > mpc.Config.MaxGridExport {
+		return false
+	}
+	return true
+}
+
+// ExecuteControl applies the first decision and returns it
+func (mpc *MPCController) ExecuteControl(forecast []TimeSlot) *ControlDecision {
+	decisions := mpc.Optimize(forecast)
+	if len(decisions) == 0 {
+		return nil
+	}
+
+	// Execute first decision
+	decision := decisions[0]
+	mpc.CurrentSOC = decision.BatterySOC
+
+	return &decision
+}
