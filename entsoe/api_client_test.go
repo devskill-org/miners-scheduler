@@ -79,7 +79,7 @@ func TestSetUserAgent(t *testing.T) {
 	}
 }
 
-func TestDownloadPublicationMarketDocument_Success(t *testing.T) {
+func TestDownloadPublicationMarketData_Success(t *testing.T) {
 	// Create a test server that returns sample XML
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request headers
@@ -101,10 +101,10 @@ func TestDownloadPublicationMarketDocument_Success(t *testing.T) {
 	client := NewAPIClient()
 	ctx := context.Background()
 
-	doc, err := client.DownloadPublicationMarketDocument(ctx, server.URL)
+	doc, err := client.DownloadPublicationMarketData(ctx, server.URL)
 
 	if err != nil {
-		t.Fatalf("DownloadPublicationMarketDocument() failed: %v", err)
+		t.Fatalf("DownloadPublicationMarketData() failed: %v", err)
 	}
 
 	if doc == nil {
@@ -125,11 +125,11 @@ func TestDownloadPublicationMarketDocument_Success(t *testing.T) {
 	}
 }
 
-func TestDownloadPublicationMarketDocument_EmptyURL(t *testing.T) {
+func TestDownloadPublicationMarketData_EmptyURL(t *testing.T) {
 	client := NewAPIClient()
 	ctx := context.Background()
 
-	_, err := client.DownloadPublicationMarketDocument(ctx, "")
+	_, err := client.DownloadPublicationMarketData(ctx, "")
 
 	if err == nil {
 		t.Fatal("Expected error for empty URL, got nil")
@@ -141,7 +141,7 @@ func TestDownloadPublicationMarketDocument_EmptyURL(t *testing.T) {
 	}
 }
 
-func TestDownloadPublicationMarketDocument_HTTPError(t *testing.T) {
+func TestDownloadPublicationMarketData_HTTPError(t *testing.T) {
 	// Create a test server that returns HTTP 500
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -152,7 +152,7 @@ func TestDownloadPublicationMarketDocument_HTTPError(t *testing.T) {
 	client := NewAPIClient()
 	ctx := context.Background()
 
-	_, err := client.DownloadPublicationMarketDocument(ctx, server.URL)
+	_, err := client.DownloadPublicationMarketData(ctx, server.URL)
 
 	if err == nil {
 		t.Fatal("Expected error for HTTP 500, got nil")
@@ -164,7 +164,7 @@ func TestDownloadPublicationMarketDocument_HTTPError(t *testing.T) {
 	}
 }
 
-func TestDownloadPublicationMarketDocument_InvalidXML(t *testing.T) {
+func TestDownloadPublicationMarketData_InvalidXML(t *testing.T) {
 	// Create a test server that returns invalid XML
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
@@ -176,7 +176,7 @@ func TestDownloadPublicationMarketDocument_InvalidXML(t *testing.T) {
 	client := NewAPIClient()
 	ctx := context.Background()
 
-	_, err := client.DownloadPublicationMarketDocument(ctx, server.URL)
+	_, err := client.DownloadPublicationMarketData(ctx, server.URL)
 
 	if err == nil {
 		t.Fatal("Expected error for invalid XML, got nil")
@@ -188,7 +188,7 @@ func TestDownloadPublicationMarketDocument_InvalidXML(t *testing.T) {
 	}
 }
 
-func TestDownloadPublicationMarketDocument_ContextCancellation(t *testing.T) {
+func TestDownloadPublicationMarketData_ContextCancellation(t *testing.T) {
 	// Create a test server with a delay
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
@@ -202,7 +202,7 @@ func TestDownloadPublicationMarketDocument_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := client.DownloadPublicationMarketDocument(ctx, server.URL)
+	_, err := client.DownloadPublicationMarketData(ctx, server.URL)
 
 	if err == nil {
 		t.Fatal("Expected error for context timeout, got nil")
@@ -214,7 +214,7 @@ func TestDownloadPublicationMarketDocument_ContextCancellation(t *testing.T) {
 	}
 }
 
-func TestDownloadPublicationMarketDocumentWithOptions_Success(t *testing.T) {
+func TestDownloadPublicationMarketDataWithOptions_Success(t *testing.T) {
 	customUserAgent := "test-agent/1.0"
 	customHeader := "test-value"
 
@@ -242,10 +242,10 @@ func TestDownloadPublicationMarketDocumentWithOptions_Success(t *testing.T) {
 		},
 	}
 
-	doc, err := DownloadPublicationMarketDocumentWithOptions(ctx, server.URL, opts)
+	doc, err := DownloadPublicationMarketDataWithOptions(ctx, server.URL, opts)
 
 	if err != nil {
-		t.Fatalf("DownloadPublicationMarketDocumentWithOptions() failed: %v", err)
+		t.Fatalf("DownloadPublicationMarketDataWithOptions() failed: %v", err)
 	}
 
 	if doc == nil {
@@ -257,11 +257,11 @@ func TestDownloadPublicationMarketDocumentWithOptions_Success(t *testing.T) {
 	}
 }
 
-func TestDownloadPublicationMarketDocumentWithOptions_EmptyURL(t *testing.T) {
+func TestDownloadPublicationMarketDataWithOptions_EmptyURL(t *testing.T) {
 	ctx := context.Background()
 	opts := &DownloadOptions{}
 
-	_, err := DownloadPublicationMarketDocumentWithOptions(ctx, "", opts)
+	_, err := DownloadPublicationMarketDataWithOptions(ctx, "", opts)
 
 	if err == nil {
 		t.Fatal("Expected error for empty URL, got nil")
@@ -324,8 +324,8 @@ func TestValidateAPIURL(t *testing.T) {
 	}
 }
 
-// Unit tests for buildPublicationMarketDocumentURL
-func TestBuildPublicationMarketDocumentURL(t *testing.T) {
+// Unit tests for buildPublicationMarketDataURL
+func TestBuildPublicationMarketDataURL(t *testing.T) {
 	securityToken := "test-token"
 	urlFormat := "https://example.com?start=%s&end=%s&token=%s"
 
@@ -373,7 +373,7 @@ func TestBuildPublicationMarketDocumentURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			url := buildPublicationMarketDocumentURL(securityToken, urlFormat, tt.now)
+			url := buildPublicationMarketDataURL(securityToken, urlFormat, tt.now)
 			if url != tt.expected {
 				t.Errorf("For %s, got url: %s, want: %s", tt.name, url, tt.expected)
 			}
@@ -381,7 +381,7 @@ func TestBuildPublicationMarketDocumentURL(t *testing.T) {
 	}
 }
 
-func TestDownloadPublicationMarketDocument_CustomUserAgent(t *testing.T) {
+func TestDownloadPublicationMarketData_CustomUserAgent(t *testing.T) {
 	customUserAgent := "my-test-agent/3.0"
 
 	// Create a test server that checks the user agent
@@ -400,15 +400,15 @@ func TestDownloadPublicationMarketDocument_CustomUserAgent(t *testing.T) {
 	client.SetUserAgent(customUserAgent)
 	ctx := context.Background()
 
-	_, err := client.DownloadPublicationMarketDocument(ctx, server.URL)
+	_, err := client.DownloadPublicationMarketData(ctx, server.URL)
 
 	if err != nil {
-		t.Fatalf("DownloadPublicationMarketDocument() failed: %v", err)
+		t.Fatalf("DownloadPublicationMarketData() failed: %v", err)
 	}
 }
 
 // Benchmark tests
-func BenchmarkDownloadPublicationMarketDocument(b *testing.B) {
+func BenchmarkDownloadPublicationMarketData(b *testing.B) {
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
@@ -422,9 +422,9 @@ func BenchmarkDownloadPublicationMarketDocument(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := client.DownloadPublicationMarketDocument(ctx, server.URL)
+		_, err := client.DownloadPublicationMarketData(ctx, server.URL)
 		if err != nil {
-			b.Fatalf("DownloadPublicationMarketDocument() failed: %v", err)
+			b.Fatalf("DownloadPublicationMarketData() failed: %v", err)
 		}
 	}
 }
@@ -438,15 +438,170 @@ func BenchmarkValidateAPIURL(b *testing.B) {
 	}
 }
 
+// TestMergePublicationMarketData tests the merging of two PublicationMarketData objects
+func TestMergePublicationMarketData(t *testing.T) {
+	// Create first document
+	doc1 := &PublicationMarketData{
+		MRID:           "doc1",
+		RevisionNumber: 1,
+		Type:           "A44",
+		PeriodTimeInterval: TimeInterval{
+			Start: time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+			End:   time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC),
+		},
+		TimeSeries: []TimeSeries{
+			{
+				MRID:         "ts1",
+				BusinessType: "A62",
+				Period: Period{
+					TimeInterval: TimeInterval{
+						Start: time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+						End:   time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC),
+					},
+					Resolution: time.Hour,
+					Points: []Point{
+						{Position: 1, PriceAmount: 45.50},
+						{Position: 2, PriceAmount: 42.30},
+					},
+				},
+			},
+		},
+	}
+
+	// Create second document
+	doc2 := &PublicationMarketData{
+		MRID:           "doc2",
+		RevisionNumber: 1,
+		Type:           "A44",
+		PeriodTimeInterval: TimeInterval{
+			Start: time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC),
+			End:   time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC),
+		},
+		TimeSeries: []TimeSeries{
+			{
+				MRID:         "ts2",
+				BusinessType: "A62",
+				Period: Period{
+					TimeInterval: TimeInterval{
+						Start: time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC),
+						End:   time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC),
+					},
+					Resolution: time.Hour,
+					Points: []Point{
+						{Position: 1, PriceAmount: 50.00},
+						{Position: 2, PriceAmount: 48.75},
+					},
+				},
+			},
+		},
+	}
+
+	// Test merging
+	merged := mergePublicationMarketData(doc1, doc2)
+
+	// Verify the merged document contains TimeSeries from both documents
+	if len(merged.TimeSeries) != 2 {
+		t.Errorf("Expected 2 TimeSeries in merged document, got %d", len(merged.TimeSeries))
+	}
+
+	// Verify first TimeSeries is from doc1
+	if merged.TimeSeries[0].MRID != "ts1" {
+		t.Errorf("Expected first TimeSeries MRID 'ts1', got '%s'", merged.TimeSeries[0].MRID)
+	}
+
+	// Verify second TimeSeries is from doc2
+	if merged.TimeSeries[1].MRID != "ts2" {
+		t.Errorf("Expected second TimeSeries MRID 'ts2', got '%s'", merged.TimeSeries[1].MRID)
+	}
+
+	// Verify the period time interval is updated to span both documents
+	expectedEnd := time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC)
+	if !merged.PeriodTimeInterval.End.Equal(expectedEnd) {
+		t.Errorf("Expected merged PeriodTimeInterval.End to be %v, got %v", expectedEnd, merged.PeriodTimeInterval.End)
+	}
+
+	// Verify the start time is preserved from the first document
+	expectedStart := time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)
+	if !merged.PeriodTimeInterval.Start.Equal(expectedStart) {
+		t.Errorf("Expected merged PeriodTimeInterval.Start to be %v, got %v", expectedStart, merged.PeriodTimeInterval.Start)
+	}
+
+	// Verify that the original document is not modified
+	if len(doc1.TimeSeries) != 1 {
+		t.Errorf("Original doc1 should still have 1 TimeSeries, got %d", len(doc1.TimeSeries))
+	}
+}
+
+// TestMergePublicationMarketData_NilInputs tests merging with nil inputs
+func TestMergePublicationMarketData_NilInputs(t *testing.T) {
+	doc := &PublicationMarketData{
+		MRID: "doc1",
+		TimeSeries: []TimeSeries{
+			{MRID: "ts1"},
+		},
+	}
+
+	// Test first parameter nil
+	result := mergePublicationMarketData(nil, doc)
+	if result != doc {
+		t.Error("Expected merging nil with doc to return doc")
+	}
+
+	// Test second parameter nil
+	result = mergePublicationMarketData(doc, nil)
+	if result != doc {
+		t.Error("Expected merging doc with nil to return doc")
+	}
+
+	// Test both parameters nil
+	result = mergePublicationMarketData(nil, nil)
+	if result != nil {
+		t.Error("Expected merging nil with nil to return nil")
+	}
+}
+
+// TestMergePublicationMarketData_EndTimeNotExtended tests that end time is not updated if second doc has earlier end time
+func TestMergePublicationMarketData_EndTimeNotExtended(t *testing.T) {
+	doc1 := &PublicationMarketData{
+		MRID: "doc1",
+		PeriodTimeInterval: TimeInterval{
+			Start: time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+			End:   time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC),
+		},
+		TimeSeries: []TimeSeries{
+			{MRID: "ts1"},
+		},
+	}
+
+	doc2 := &PublicationMarketData{
+		MRID: "doc2",
+		PeriodTimeInterval: TimeInterval{
+			Start: time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC),
+			End:   time.Date(2024, 6, 2, 12, 0, 0, 0, time.UTC),
+		},
+		TimeSeries: []TimeSeries{
+			{MRID: "ts2"},
+		},
+	}
+
+	merged := mergePublicationMarketData(doc1, doc2)
+
+	// The end time should remain from doc1 since doc2's end time is earlier
+	expectedEnd := time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC)
+	if !merged.PeriodTimeInterval.End.Equal(expectedEnd) {
+		t.Errorf("Expected merged PeriodTimeInterval.End to remain %v, got %v", expectedEnd, merged.PeriodTimeInterval.End)
+	}
+}
+
 // Example test showing how to use the API client
-func ExampleAPIClient_DownloadPublicationMarketDocument() {
+func ExampleAPIClient_DownloadPublicationMarketData() {
 	client := NewAPIClient()
 	ctx := context.Background()
 
 	// This would be a real ENTSO-E API URL in practice
 	apiURL := "https://web-api.tp.entsoe.eu/api?documentType=A44&in_Domain=10YCZ-CEPS-----N&out_Domain=10YCZ-CEPS-----N&periodStart=202509052300&periodEnd=202509062300&securityToken=YOUR_TOKEN"
 
-	doc, err := client.DownloadPublicationMarketDocument(ctx, apiURL)
+	doc, err := client.DownloadPublicationMarketData(ctx, apiURL)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return

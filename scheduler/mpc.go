@@ -159,14 +159,12 @@ type PricePoint struct {
 // getPriceForecast gets electricity prices for the next 24 hours
 func (s *MinerScheduler) getPriceForecast(ctx context.Context, now time.Time) (map[int]PricePoint, error) {
 
-	_, err := s.getCurrentAvgPrice(ctx)
+	// Get the market data
+	marketData, err := s.GetMarketData(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	// Get the latest document
-	latestDoc := s.GetLatestDocument()
-	if latestDoc == nil {
+	if marketData == nil {
 		return nil, fmt.Errorf("no price document available")
 	}
 
@@ -177,7 +175,7 @@ func (s *MinerScheduler) getPriceForecast(ctx context.Context, now time.Time) (m
 	forecast := make(map[int]PricePoint)
 	for i := range 24 {
 		futureTime := now.Add(time.Duration(i) * time.Hour)
-		price, found := latestDoc.LookupAveragePriceInHourByTime(futureTime)
+		price, found := marketData.LookupAveragePriceInHourByTime(futureTime)
 
 		if found {
 			// Apply price adjustments from configuration (all values in EUR/MWh)

@@ -8,11 +8,53 @@ import (
 	"github.com/devskill-org/miners-scheduler/entsoe"
 )
 
-// GetLatestDocument returns the latest PublicationMarketDocument
-func (s *MinerScheduler) GetLatestDocument() *entsoe.PublicationMarketDocument {
+// GetMarketData returns the latest PublicationMarketData, downloading new data if needed
+func (s *MinerScheduler) GetMarketData(ctx context.Context) (*entsoe.PublicationMarketData, error) {
+	now := time.Now()
+
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.latestDocument
+	marketData := s.pricesMarketData
+	expiry := s.pricesMarketDataExpiry
+	s.mu.RUnlock()
+
+	// Check if we have cached data and it hasn't expired
+	if marketData != nil && now.Before(expiry) {
+		return marketData, nil
+	}
+
+	// Cache expired or no cached document, download new data
+	if marketData != nil {
+		s.logger.Printf("Cached pricing data expired at %s, downloading new PublicationMarketData...", expiry.Format(time.RFC3339))
+	} else {
+		s.logger.Printf("No cached pricing data available, downloading new PublicationMarketData...")
+	}
+
+	location, err := time.LoadLocation(s.config.Location)
+	if err != nil {
+		return nil, err
+	}
+
+	newDoc, err := entsoe.DownloadPublicationMarketData(ctx, s.config.SecurityToken, s.config.UrlFormat, location)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download PublicationMarketData: %w", err)
+	}
+
+	// Calculate next expiry time at 13:00
+	nextExpiry := time.Date(now.Year(), now.Month(), now.Day(), 13, 0, 0, 0, location)
+
+	// If it's already past 13:00 today, set expiry to 13:00 tomorrow
+	if now.Hour() >= 13 {
+		nextExpiry = nextExpiry.Add(24 * time.Hour)
+	}
+
+	// Store as latest with expiry time
+	s.mu.Lock()
+	s.pricesMarketData = newDoc
+	s.pricesMarketDataExpiry = nextExpiry
+	s.mu.Unlock()
+
+	s.logger.Printf("Successfully downloaded new PublicationMarketData, cache expires at %s", nextExpiry.Format(time.RFC3339))
+	return newDoc, nil
 }
 
 // runPriceCheck executes the main scheduler task
@@ -42,40 +84,15 @@ func (s *MinerScheduler) runPriceCheck(ctx context.Context) {
 func (s *MinerScheduler) getCurrentAvgPrice(ctx context.Context) (float64, error) {
 	now := time.Now()
 
-	// Step 2: Try to get price from latest document
-	s.mu.RLock()
-	latestDoc := s.latestDocument
-	s.mu.RUnlock()
-
-	if latestDoc != nil {
-		if price, found := latestDoc.LookupAveragePriceInHourByTime(now); found {
-			s.logger.Printf("Price found in cached document: %.2f EUR/MWh", price)
-			return price, nil
-		}
-		s.logger.Printf("Price not found in cached document")
-	} else {
-		s.logger.Printf("No cached document available")
-	}
-
-	// Step 3: Download new PublicationMarketDocument
-	s.logger.Printf("Downloading new PublicationMarketDocument...")
-	newDoc, err := entsoe.DownloadPublicationMarketDocument(ctx, s.config.SecurityToken, s.config.UrlFormat, s.config.Location)
+	marketData, err := s.GetMarketData(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("failed to download PublicationMarketDocument: %w", err)
+		return 0, fmt.Errorf("failed to get market prices: %w", err)
 	}
 
-	// Store as latest
-	s.mu.Lock()
-	s.latestDocument = newDoc
-	s.mu.Unlock()
-
-	s.logger.Printf("Successfully downloaded new PublicationMarketDocument")
-
-	// Try to get price from new document
-	if price, found := newDoc.LookupAveragePriceInHourByTime(now); found {
-		s.logger.Printf("Price found in new document: %.2f EUR/MWh", price)
+	if price, found := marketData.LookupAveragePriceInHourByTime(now); found {
+		s.logger.Printf("Price found: %.2f EUR/MWh", price)
 		return price, nil
 	}
 
-	return 0, fmt.Errorf("price not found in new document for time: %s", now.Format(time.RFC3339))
+	return 0, fmt.Errorf("price not found for time: %s", now.Format(time.RFC3339))
 }

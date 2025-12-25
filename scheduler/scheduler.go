@@ -18,11 +18,12 @@ type MinerScheduler struct {
 	config *Config
 
 	// State
-	discoveredMiners map[string]*miners.AvalonQHost
-	latestDocument   *entsoe.PublicationMarketDocument
-	isRunning        bool
-	stopChan         chan struct{}
-	mu               sync.RWMutex
+	discoveredMiners       map[string]*miners.AvalonQHost
+	pricesMarketData       *entsoe.PublicationMarketData
+	pricesMarketDataExpiry time.Time
+	isRunning              bool
+	stopChan               chan struct{}
+	mu                     sync.RWMutex
 
 	// Weather forecast cache
 	weatherCache WeatherForecastCache
@@ -248,30 +249,15 @@ func (s *MinerScheduler) GetStatus() SchedulerStatus {
 	defer s.mu.RUnlock()
 
 	return SchedulerStatus{
-		IsRunning:        s.isRunning,
-		MinersCount:      len(s.discoveredMiners),
-		HasLatestDoc:     s.latestDocument != nil,
-		LastDocumentTime: s.getLastDocumentTime(),
+		IsRunning:     s.isRunning,
+		MinersCount:   len(s.discoveredMiners),
+		HasMarketData: s.pricesMarketData != nil,
 	}
-}
-
-// getLastDocumentTime returns the creation time of the latest document
-func (s *MinerScheduler) getLastDocumentTime() *time.Time {
-	if s.latestDocument == nil {
-		return nil
-	}
-
-	if t, err := time.Parse(time.RFC3339, s.latestDocument.CreatedDateTime); err == nil {
-		return &t
-	}
-
-	return nil
 }
 
 // SchedulerStatus represents the current status of the scheduler
 type SchedulerStatus struct {
-	IsRunning        bool       `json:"is_running"`
-	MinersCount      int        `json:"miners_count"`
-	HasLatestDoc     bool       `json:"has_latest_document"`
-	LastDocumentTime *time.Time `json:"last_document_time,omitempty"`
+	IsRunning     bool `json:"is_running"`
+	MinersCount   int  `json:"miners_count"`
+	HasMarketData bool `json:"has_latest_document"`
 }

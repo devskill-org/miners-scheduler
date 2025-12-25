@@ -294,41 +294,6 @@ func TestDiscoverMinersPreservesExisting(t *testing.T) {
 	}
 }
 
-func TestGetLatestDocument(t *testing.T) {
-	scheduler := NewMinerScheduler(&Config{
-		PriceLimit:               50.0,
-		Network:                  "192.168.1.0/24",
-		CheckPriceInterval:       time.Minute,
-		MinersStateCheckInterval: time.Minute,
-		MinerDiscoveryInterval:   10 * time.Minute,
-	}, nil)
-
-	// Initially nil
-	doc := scheduler.GetLatestDocument()
-	if doc != nil {
-		t.Error("Expected nil document initially")
-	}
-
-	// Mock a document
-	mockDoc := &entsoe.PublicationMarketDocument{
-		MRID: "test-document",
-	}
-
-	scheduler.mu.Lock()
-	scheduler.latestDocument = mockDoc
-	scheduler.mu.Unlock()
-
-	// Test getting document
-	retrievedDoc := scheduler.GetLatestDocument()
-	if retrievedDoc == nil {
-		t.Error("Expected document, got nil")
-	}
-
-	if retrievedDoc.MRID != mockDoc.MRID {
-		t.Errorf("Expected MRID %s, got %s", mockDoc.MRID, retrievedDoc.MRID)
-	}
-}
-
 func TestGetStatus(t *testing.T) {
 
 	scheduler := NewMinerScheduler(&Config{
@@ -349,12 +314,8 @@ func TestGetStatus(t *testing.T) {
 		t.Errorf("Expected miners count 0, got %d", status.MinersCount)
 	}
 
-	if status.HasLatestDoc {
-		t.Error("Expected has latest document false")
-	}
-
-	if status.LastDocumentTime != nil {
-		t.Error("Expected nil last document time")
+	if status.HasMarketData {
+		t.Error("Expected has no market data")
 	}
 }
 
@@ -373,7 +334,7 @@ func TestSchedulerStatus_WithData(t *testing.T) {
 		{Address: "192.168.1.101", Port: 4028},
 	}
 
-	mockDoc := &entsoe.PublicationMarketDocument{
+	mockDoc := &entsoe.PublicationMarketData{
 		MRID:            "test-doc",
 		CreatedDateTime: "2024-01-15T10:30:00Z",
 	}
@@ -384,7 +345,7 @@ func TestSchedulerStatus_WithData(t *testing.T) {
 		key := fmt.Sprintf("%s:%d", miner.Address, miner.Port)
 		scheduler.discoveredMiners[key] = miner
 	}
-	scheduler.latestDocument = mockDoc
+	scheduler.pricesMarketData = mockDoc
 	scheduler.mu.Unlock()
 
 	status := scheduler.GetStatus()
@@ -393,18 +354,8 @@ func TestSchedulerStatus_WithData(t *testing.T) {
 		t.Errorf("Expected miners count %d, got %d", len(mockMiners), status.MinersCount)
 	}
 
-	if !status.HasLatestDoc {
-		t.Error("Expected has latest document true")
-	}
-
-	if status.LastDocumentTime == nil {
-		t.Error("Expected non-nil last document time")
-	} else {
-		expected := "2024-01-15T10:30:00Z"
-		if status.LastDocumentTime.Format(time.RFC3339) != expected {
-			t.Errorf("Expected document time %s, got %s",
-				expected, status.LastDocumentTime.Format(time.RFC3339))
-		}
+	if !status.HasMarketData {
+		t.Error("Expected has market data")
 	}
 }
 
