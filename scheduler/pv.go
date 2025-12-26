@@ -73,10 +73,10 @@ func (p *PVSamples) IsEmpty() bool {
 }
 
 func (s *MinerScheduler) runPVPoll(samples *PVSamples) {
-	if s.config.PlantModbusIP == "" {
+	if s.config.PlantModbusAddress == "" {
 		return
 	}
-	client, err := sigenergy.NewTCPClient(s.config.PlantModbusIP, sigenergy.PlantAddress)
+	client, err := sigenergy.NewTCPClient(s.config.PlantModbusAddress, sigenergy.PlantAddress)
 	if err != nil {
 		s.logger.Printf("PV integration: failed to create modbus client: %v", err)
 		return

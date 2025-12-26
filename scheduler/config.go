@@ -41,7 +41,7 @@ type Config struct {
 	FanRLowThreshold  int `json:"fanr_low_threshold"`  // FanR threshold to increase work mode
 
 	// Plant Modbus server
-	PlantModbusIP string `json:"plant_modbus_ip"` // IP address of Plant Modbus server
+	PlantModbusAddress string `json:"plant_modbus_address"` // Plant Modbus server address (format: IP:PORT, e.g., "192.168.1.100:502")
 
 	// PV metrics integration
 	DeviceID            int           `json:"device_id"`             // Device ID for metrics table
@@ -92,7 +92,7 @@ func DefaultConfig() *Config {
 		PVIntegrationPeriod:      15 * time.Minute,
 		PostgresConnString:       "",
 		UrlFormat:                "https://web-api.tp.entsoe.eu/api?documentType=A44&out_Domain=10YLV-1001A00074&in_Domain=10YLV-1001A00074&periodStart=%s&periodEnd=%s&securityToken=%s",
-		PlantModbusIP:            "",
+		PlantModbusAddress:       "",
 		Latitude:                 56.9496, // Riga, Latvia
 		Longitude:                24.1052, // Riga, Latvia
 		WeatherUpdateInterval:    1 * time.Hour,

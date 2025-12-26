@@ -18,9 +18,9 @@ func (s *MinerScheduler) runMPCOptimize(ctx context.Context) {
 
 	config := s.GetConfig()
 
-	// Check if Plant Modbus IP is configured
-	if config.PlantModbusIP == "" {
-		s.logger.Printf("MPC optimization skipped: PlantModbusIP not configured")
+	// Check if Plant Modbus Address is configured
+	if config.PlantModbusAddress == "" {
+		s.logger.Printf("MPC optimization skipped: PlantModbusAddress not configured")
 		return
 	}
 
@@ -85,7 +85,7 @@ func (s *MinerScheduler) runMPCOptimize(ctx context.Context) {
 // readInitialSOC reads the current State of Charge from the inverter
 func (s *MinerScheduler) readInitialSOC(config *Config) (float64, error) {
 	// Connect to Plant Modbus server
-	client, err := sigenergy.NewTCPClient(config.PlantModbusIP, sigenergy.PlantAddress)
+	client, err := sigenergy.NewTCPClient(config.PlantModbusAddress, sigenergy.PlantAddress)
 	if err != nil {
 		return 0, fmt.Errorf("failed to connect to Plant Modbus: %w", err)
 	}
