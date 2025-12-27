@@ -47,10 +47,27 @@ func (s *MinerScheduler) runMinerDiscovery(ctx context.Context) {
 	s.logger.Printf("Miner discovery task completed successfully")
 }
 
+// refreshMinersState refreshes the state of all discovered miners and returns miners list
+func (s *MinerScheduler) refreshMinersState(ctx context.Context) []*miners.AvalonQHost {
+	var wg sync.WaitGroup
+	minersList := s.GetDiscoveredMiners()
+	for _, miner := range minersList {
+		wg.Add(1)
+		go func(m *miners.AvalonQHost) {
+			defer wg.Done()
+
+			// Get current stats
+			m.RefreshLiteStats(ctx)
+		}(miner)
+	}
+	wg.Wait()
+	return minersList
+}
+
 // manageMiners manages miner states based on current price vs price limit
 func (s *MinerScheduler) manageMiners(ctx context.Context, currentPrice float64) error {
 	priceLimit := s.config.PriceLimit
-	minersList := s.GetDiscoveredMiners()
+	minersList := s.refreshMinersState(ctx)
 
 	if len(minersList) == 0 {
 		s.logger.Printf("No miners to manage")
@@ -71,18 +88,12 @@ func (s *MinerScheduler) manageMiners(ctx context.Context, currentPrice float64)
 			defer wg.Done()
 
 			// Get current stats
-			stats, err := m.GetLiteStats(ctx)
-			if err != nil {
-				errChan <- fmt.Errorf("failed to get stats for miner %s:%d: %w", m.Address, m.Port, err)
+			if m.LastStatsError != nil {
+				errChan <- m.LastStatsError
 				return
 			}
 
-			if len(stats.Stats) == 0 || stats.Stats[0].MMIDSummary == nil {
-				errChan <- fmt.Errorf("invalid stats response for miner %s:%d", m.Address, m.Port)
-				return
-			}
-
-			currentState := stats.Stats[0].MMIDSummary.State
+			currentState := m.LastStats.State
 			s.logger.Printf("Miner %s:%d current state: %s", m.Address, m.Port, currentState.String())
 
 			// Decision logic based on price comparison
@@ -160,7 +171,7 @@ func (s *MinerScheduler) manageMiners(ctx context.Context, currentPrice float64)
 
 // runStateCheck executes the state monitoring task for miners
 func (s *MinerScheduler) runStateCheck(ctx context.Context) {
-	minersList := s.GetDiscoveredMiners()
+	minersList := s.refreshMinersState(ctx)
 	if len(minersList) == 0 {
 		return
 	}
@@ -176,29 +187,21 @@ func (s *MinerScheduler) runStateCheck(ctx context.Context) {
 			defer wg.Done()
 
 			// Get current stats
-			stats, err := m.GetLiteStats(ctx)
-			if err != nil {
-				errChan <- fmt.Errorf("failed to get stats for miner %s:%d: %w", m.Address, m.Port, err)
+			if m.LastStatsError != nil {
+				errChan <- m.LastStatsError
 				return
 			}
 
-			if len(stats.Stats) == 0 || stats.Stats[0].MMIDSummary == nil {
-				errChan <- fmt.Errorf("no stats response for miner %s:%d", m.Address, m.Port)
-				return
-			}
-
-			fanR := stats.Stats[0].MMIDSummary.FanR
-			currentWorkMode := stats.Stats[0].MMIDSummary.WorkMode
-			currentState := stats.Stats[0].MMIDSummary.State
-			hbiTemp := stats.Stats[0].MMIDSummary.HBITemp
-			hboTemp := stats.Stats[0].MMIDSummary.HBOTemp
-			iTemp := stats.Stats[0].MMIDSummary.ITemp
+			fanR := m.LastStats.FanR
+			currentWorkMode := m.LastStats.WorkMode
+			currentState := m.LastStats.State
+			hbiTemp := m.LastStats.HBITemp
+			hboTemp := m.LastStats.HBOTemp
+			iTemp := m.LastStats.ITemp
 
 			if currentState != miners.AvalonStateMining {
 				return
 			}
-
-			miner.AddLiteStats(stats.Stats[0].MMIDSummary)
 
 			s.logger.Printf("Miner %s:%d - FanR: %d%%, HBITemp:%d, HBOTemp:%d, ITemp:%d, WorkMode: %d",
 				m.Address,

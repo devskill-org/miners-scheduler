@@ -51,10 +51,17 @@ type AvalonQHost struct {
 	Port             int
 	Version          *AvalonQVersion
 	LiteStatsHistory []*AvalonLiteStats
+	LastStatsError   error
+	LastStats        *AvalonLiteStats
 }
 
 // AddLiteStats appends a new AvalonLiteStats to the history and keeps only the last 5 entries.
-func (h *AvalonQHost) AddLiteStats(stats *AvalonLiteStats) {
+func (h *AvalonQHost) AddLiteStats(stats *AvalonLiteStats, err error) {
+	h.LastStats = stats
+	h.LastStatsError = err
+	if err != nil {
+		return
+	}
 	h.LiteStatsHistory = append(h.LiteStatsHistory, stats)
 	if len(h.LiteStatsHistory) > 5 {
 		h.LiteStatsHistory = h.LiteStatsHistory[len(h.LiteStatsHistory)-5:]
