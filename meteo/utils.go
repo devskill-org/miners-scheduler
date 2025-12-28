@@ -12,7 +12,7 @@ func (f *METJSONForecast) GetCurrentWeather() *ForecastTimeStep {
 
 	now := time.Now()
 	var closest *ForecastTimeStep
-	var minDiff time.Duration = time.Duration(1<<63 - 1) // Max duration
+	minDiff := time.Duration(1<<63 - 1) // Max duration
 
 	for i := range f.Properties.Timeseries {
 		step := &f.Properties.Timeseries[i]
@@ -36,7 +36,7 @@ func (f *METJSONForecast) GetWeatherAtTime(targetTime time.Time) *ForecastTimeSt
 	}
 
 	var closest *ForecastTimeStep
-	var minDiff time.Duration = time.Duration(1<<63 - 1) // Max duration
+	minDiff := time.Duration(1<<63 - 1) // Max duration
 
 	for i := range f.Properties.Timeseries {
 		step := &f.Properties.Timeseries[i]

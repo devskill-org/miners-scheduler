@@ -129,7 +129,9 @@ func (hs *HealthServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(health)
+	if err := json.NewEncoder(w).Encode(health); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // readinessHandler handles the /ready endpoint
@@ -152,7 +154,9 @@ func (hs *HealthServer) readinessHandler(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 
-	json.NewEncoder(w).Encode(ready)
+	if err := json.NewEncoder(w).Encode(ready); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // statusHandler handles the /status endpoint (detailed status)
@@ -195,7 +199,9 @@ func (hs *HealthServer) statusHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // rootHandler handles the root endpoint
@@ -225,17 +231,12 @@ func (hs *HealthServer) rootHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // Helper functions
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
-}
 
 func getPriceAction(currentPrice, priceLimit float64) string {
 	if currentPrice <= priceLimit {

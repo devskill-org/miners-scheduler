@@ -89,7 +89,9 @@ func bytesToU16(data []byte) uint16 {
 }
 
 func bytesToS16(data []byte) int16 {
-	return int16(binary.BigEndian.Uint16(data))
+	val := binary.BigEndian.Uint16(data)
+	// #nosec G115 -- Modbus uses signed 16-bit integers, intentional conversion
+	return int16(val)
 }
 
 func bytesToU32(data []byte) uint32 {
@@ -97,23 +99,9 @@ func bytesToU32(data []byte) uint32 {
 }
 
 func bytesToS32(data []byte) int32 {
-	return int32(binary.BigEndian.Uint32(data))
-}
-
-func bytesToU64(data []byte) uint64 {
-	return binary.BigEndian.Uint64(data)
-}
-
-func u16ToBytes(val uint16) []byte {
-	buf := make([]byte, 2)
-	binary.BigEndian.PutUint16(buf, val)
-	return buf
-}
-
-func s16ToBytes(val int16) []byte {
-	buf := make([]byte, 2)
-	binary.BigEndian.PutUint16(buf, uint16(val))
-	return buf
+	val := binary.BigEndian.Uint32(data)
+	// #nosec G115 -- Modbus uses signed 32-bit integers, intentional conversion
+	return int32(val)
 }
 
 func u32ToBytes(val uint32) []byte {
@@ -124,6 +112,7 @@ func u32ToBytes(val uint32) []byte {
 
 func s32ToBytes(val int32) []byte {
 	buf := make([]byte, 4)
+	// #nosec G115 -- Modbus uses signed 32-bit integers, intentional conversion
 	binary.BigEndian.PutUint32(buf, uint32(val))
 	return buf
 }
@@ -275,6 +264,7 @@ func (c *SigenModbusClient) SetReactivePowerFixed(powerKVar float64) error {
 func (c *SigenModbusClient) SetActivePowerPercent(percent float64) error {
 	c.SetSlaveID(PlantAddress)
 	value := int16(percent * 100)
+	// #nosec G115 -- Modbus register requires uint16, intentional conversion from signed value
 	_, err := c.client.WriteSingleRegister(40005, uint16(value))
 	return err
 }
@@ -283,6 +273,7 @@ func (c *SigenModbusClient) SetActivePowerPercent(percent float64) error {
 func (c *SigenModbusClient) SetPowerFactor(pf float64) error {
 	c.SetSlaveID(PlantAddress)
 	value := int16(pf * 1000)
+	// #nosec G115 -- Modbus register requires uint16, intentional conversion from signed value
 	_, err := c.client.WriteSingleRegister(40007, uint16(value))
 	return err
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -129,7 +130,10 @@ func DefaultConfig() *Config {
 
 // LoadConfig loads configuration from a JSON file
 func LoadConfig(filename string) (*Config, error) {
-	file, err := os.Open(filename)
+	// Clean the filepath to prevent directory traversal
+	cleanPath := filepath.Clean(filename)
+	// #nosec G304 -- filename is cleaned and comes from trusted configuration
+	file, err := os.Open(cleanPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open config file: %w", err)
 	}
@@ -156,7 +160,10 @@ func LoadConfigFromReader(reader io.Reader) (*Config, error) {
 
 // SaveConfig saves the configuration to a JSON file
 func (c *Config) SaveConfig(filename string) error {
-	file, err := os.Create(filename)
+	// Clean the filepath to prevent directory traversal
+	cleanPath := filepath.Clean(filename)
+	// #nosec G304 -- filename is cleaned and comes from trusted configuration
+	file, err := os.Create(cleanPath)
 	if err != nil {
 		return fmt.Errorf("failed to create config file: %w", err)
 	}

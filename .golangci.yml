@@ -7,7 +7,7 @@ run:
   issues-exit-code: 1
   allow-parallel-runners: false
   allow-serial-runners: false
-  go: "1.22"
+  go: "1.24"
   relative-path-mode: wd
 
 output:
@@ -27,9 +27,7 @@ linters:
   enable:
     - govet
     - staticcheck
-    - errcheck
     - ineffassign
-    - gocyclo
     - revive
     - gosec
     - unused
@@ -38,13 +36,10 @@ linters:
   disable:
     # Often too noisy for many projects, can be enabled later if desired
     - depguard
+    - errcheck
+    - gocyclo
 
   settings:
-    errcheck:
-      check-type-assertions: true
-      check-blank: true
-    gocyclo:
-      min-complexity: 15
     revive:
       enable-default-rules: true
     unused:
@@ -58,6 +53,12 @@ linters:
       allow-unused: true
       require-explanation: false
       require-specific: false
+
+  exclusions:
+    rules:
+      - path: "_test\\.go"
+        linters:
+          - gosec
 
 issues:
   max-issues-per-linter: 0

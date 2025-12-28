@@ -352,7 +352,9 @@ func getAddresses(network string) iter.Seq[netip.Addr] {
 }
 
 func (h *AvalonQHost) Standby(ctx context.Context) (string, error) {
-	h.SetWorkMode(ctx, AvalonEcoMode, true)
+	if _, err := h.SetWorkMode(ctx, AvalonEcoMode, true); err != nil {
+		return "", err
+	}
 	return send(ctx, h.Address, h.Port,
 		func(conn net.Conn) error {
 			_, err := fmt.Fprintf(conn, "ascset|0,softoff,1: %d", time.Now().Unix())
