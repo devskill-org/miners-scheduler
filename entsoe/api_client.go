@@ -28,42 +28,53 @@ func (c *APIClient) SetUserAgent(userAgent string) {
 	c.userAgent = userAgent
 }
 
-// DownloadPublicationMarketDocument downloads and decodes a PublicationMarketDocument from the given API URL
-func (c *APIClient) DownloadPublicationMarketDocument(ctx context.Context, apiURL string) (*PublicationMarketDocument, error) {
+// DownloadPublicationMarketData downloads and decodes a PublicationMarketData from the given API URL
+func (c *APIClient) DownloadPublicationMarketData(ctx context.Context, apiURL string) (*PublicationMarketData, error) {
 	opts := &DownloadOptions{
 		UserAgent: c.userAgent,
 	}
 
-	return DownloadPublicationMarketDocumentWithOptions(ctx, apiURL, opts)
+	return DownloadPublicationMarketDataWithOptions(ctx, apiURL, opts)
 }
 
-// DownloadPublicationMarketDocumentWithOptions downloads and decodes a PublicationMarketDocument with additional options
+// DownloadPublicationMarketDataWithOptions downloads and decodes a PublicationMarketData with additional options
 type DownloadOptions struct {
 	UserAgent string
 	Headers   map[string]string
 }
 
-func DownloadPublicationMarketDocument(ctx context.Context, securityToken string, urlFormat string, locationStr string) (*PublicationMarketDocument, error) {
-	location, err := time.LoadLocation(locationStr)
-	if err != nil {
-		return nil, err
-	}
+func DownloadPublicationMarketData(ctx context.Context, securityToken string, urlFormat string, location *time.Location) (*PublicationMarketData, error) {
 
 	now := time.Now().In(location)
-	url := buildPublicationMarketDocumentURL(securityToken, urlFormat, now)
+	url := buildPublicationMarketDataURL(securityToken, urlFormat, now)
 
 	client := NewAPIClient()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	marketDocument, err := client.DownloadPublicationMarketDocument(ctx, url)
+	marketDocument, err := client.DownloadPublicationMarketData(ctx, url)
 	if err != nil {
 		return nil, err
 	}
+
+	// If current time is >= 13:00, also download data for the next day
+	if now.Hour() >= 13 {
+		tomorrow := now.AddDate(0, 0, 1)
+		urlNextDay := buildPublicationMarketDataURL(securityToken, urlFormat, tomorrow)
+
+		marketDocumentNextDay, err := client.DownloadPublicationMarketData(ctx, urlNextDay)
+		if err != nil {
+			return nil, err
+		}
+
+		// Merge the data from both days
+		marketDocument = mergePublicationMarketData(marketDocument, marketDocumentNextDay)
+	}
+
 	return marketDocument, nil
 }
 
-// buildPublicationMarketDocumentURL extracts the URL assignment logic for DownloadPublicationMarketDocument.
-func buildPublicationMarketDocumentURL(securityToken string, urlFormat string, now time.Time) string {
+// buildPublicationMarketDataURL extracts the URL assignment logic for DownloadPublicationMarketData.
+func buildPublicationMarketDataURL(securityToken string, urlFormat string, now time.Time) string {
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
 	periodStart := utils.GetUTCString(start)
@@ -72,8 +83,31 @@ func buildPublicationMarketDocumentURL(securityToken string, urlFormat string, n
 	return fmt.Sprintf(urlFormat, periodStart, periodEnd, securityToken)
 }
 
-// DownloadPublicationMarketDocumentWithOptions downloads and decodes a PublicationMarketDocument with custom options
-func DownloadPublicationMarketDocumentWithOptions(ctx context.Context, apiURL string, opts *DownloadOptions) (*PublicationMarketDocument, error) {
+// mergePublicationMarketData merges two PublicationMarketData objects by combining their TimeSeries
+func mergePublicationMarketData(first *PublicationMarketData, second *PublicationMarketData) *PublicationMarketData {
+	if first == nil {
+		return second
+	}
+	if second == nil {
+		return first
+	}
+
+	// Create a copy of the first document
+	merged := *first
+
+	// Append all TimeSeries from the second document
+	merged.TimeSeries = append(merged.TimeSeries, second.TimeSeries...)
+
+	// Update the period time interval to span both documents
+	if len(second.TimeSeries) > 0 && second.PeriodTimeInterval.End.After(merged.PeriodTimeInterval.End) {
+		merged.PeriodTimeInterval.End = second.PeriodTimeInterval.End
+	}
+
+	return &merged
+}
+
+// DownloadPublicationMarketDataWithOptions downloads and decodes a PublicationMarketData with custom options
+func DownloadPublicationMarketDataWithOptions(ctx context.Context, apiURL string, opts *DownloadOptions) (*PublicationMarketData, error) {
 	if apiURL == "" {
 		return nil, fmt.Errorf("API URL cannot be empty")
 	}

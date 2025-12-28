@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// PublicationMarketDocument represents the root element of the XML
-type PublicationMarketDocument struct {
+// PublicationMarketData represents the root element of the XML
+type PublicationMarketData struct {
 	XMLName                           xml.Name              `xml:"Publication_MarketDocument"`
 	Xmlns                             string                `xml:"xmlns,attr"`
 	MRID                              string                `xml:"mRID"`
@@ -313,10 +313,10 @@ func ParseDateTime(dateStr string) (time.Time, error) {
 	return parseTimeString(dateStr)
 }
 
-// LookupPriceByTime searches all TimeSeries in the document for a price at the given time.
+// LookupPriceByTime searches all TimeSeries in the market data for a price at the given time.
 // Returns the first matching price found and true, or 0 and false if no price is found.
 // The time lookup checks if the given time falls within any interval in any TimeSeries.
-func (pmd *PublicationMarketDocument) LookupPriceByTime(t time.Time) (float64, bool) {
+func (pmd *PublicationMarketData) LookupPriceByTime(t time.Time) (float64, bool) {
 	for _, timeSeries := range pmd.TimeSeries {
 		if price, found := timeSeries.Period.GetPriceByTime(t); found {
 			return price, true
@@ -325,9 +325,9 @@ func (pmd *PublicationMarketDocument) LookupPriceByTime(t time.Time) (float64, b
 	return 0, false
 }
 
-// LookupAveragePriceInHourByTime searches all TimeSeries in the document for the average price within the hour containing the given time.
+// LookupAveragePriceInHourByTime searches all TimeSeries in the market data for the average price within the hour containing the given time.
 // Returns the first matching average price found and true, or 0 and false if no price is found in any TimeSeries for that hour.
-func (pmd *PublicationMarketDocument) LookupAveragePriceInHourByTime(t time.Time) (float64, bool) {
+func (pmd *PublicationMarketData) LookupAveragePriceInHourByTime(t time.Time) (float64, bool) {
 	for _, timeSeries := range pmd.TimeSeries {
 		if avg, found := timeSeries.Period.averagePriceInHourByTime(t); found {
 			return avg, true
@@ -451,10 +451,10 @@ func (p *Period) averagePriceInHourByTime(t time.Time) (float64, bool) {
 }
 
 // DecodeEnergyPricesXML decodes the XML file and returns the parsed data
-func DecodeEnergyPricesXML(file io.Reader) (*PublicationMarketDocument, error) {
+func DecodeEnergyPricesXML(file io.Reader) (*PublicationMarketData, error) {
 
 	// Parse the XML
-	var doc PublicationMarketDocument
+	var doc PublicationMarketData
 	decoder := xml.NewDecoder(file)
 	err := decoder.Decode(&doc)
 	if err != nil {

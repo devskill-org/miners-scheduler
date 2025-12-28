@@ -783,3 +783,189 @@ func TestAveragePriceInHourByTime(t *testing.T) {
 		}
 	})
 }
+
+// TestLookupAveragePriceInHourByTime_MergedData tests that LookupAveragePriceInHourByTime
+// works correctly with merged data from multiple days
+func TestLookupAveragePriceInHourByTime_MergedData(t *testing.T) {
+	// Create a document representing merged data from two consecutive days
+	// Day 1: June 1, 2024, 00:00 - June 2, 2024, 00:00 (24 hours)
+	// Day 2: June 2, 2024, 00:00 - June 3, 2024, 00:00 (24 hours)
+
+	day1Start := time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)
+	day1End := time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC)
+	day2Start := time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC)
+	day2End := time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC)
+
+	// Create merged document with two time series (one for each day)
+	mergedDoc := &PublicationMarketData{
+		MRID:           "merged-doc",
+		RevisionNumber: 1,
+		Type:           "A44",
+		PeriodTimeInterval: TimeInterval{
+			Start: day1Start,
+			End:   day2End, // Spans both days
+		},
+		TimeSeries: []TimeSeries{
+			// First day's data
+			{
+				MRID:         "ts-day1",
+				BusinessType: "A62",
+				Period: Period{
+					TimeInterval: TimeInterval{
+						Start: day1Start,
+						End:   day1End,
+					},
+					Resolution: time.Hour,
+					Points: []Point{
+						{Position: 1, PriceAmount: 45.50},  // June 1, 00:00-01:00
+						{Position: 2, PriceAmount: 42.30},  // June 1, 01:00-02:00
+						{Position: 3, PriceAmount: 40.00},  // June 1, 02:00-03:00
+						{Position: 13, PriceAmount: 55.00}, // June 1, 12:00-13:00
+						{Position: 14, PriceAmount: 60.00}, // June 1, 13:00-14:00
+						{Position: 15, PriceAmount: 58.00}, // June 1, 14:00-15:00
+						{Position: 23, PriceAmount: 50.00}, // June 1, 22:00-23:00
+						{Position: 24, PriceAmount: 48.00}, // June 1, 23:00-00:00
+					},
+				},
+			},
+			// Second day's data
+			{
+				MRID:         "ts-day2",
+				BusinessType: "A62",
+				Period: Period{
+					TimeInterval: TimeInterval{
+						Start: day2Start,
+						End:   day2End,
+					},
+					Resolution: time.Hour,
+					Points: []Point{
+						{Position: 1, PriceAmount: 46.00},  // June 2, 00:00-01:00
+						{Position: 2, PriceAmount: 44.00},  // June 2, 01:00-02:00
+						{Position: 3, PriceAmount: 43.00},  // June 2, 02:00-03:00
+						{Position: 13, PriceAmount: 57.00}, // June 2, 12:00-13:00
+						{Position: 14, PriceAmount: 62.00}, // June 2, 13:00-14:00
+						{Position: 15, PriceAmount: 59.00}, // June 2, 14:00-15:00
+						{Position: 23, PriceAmount: 52.00}, // June 2, 22:00-23:00
+						{Position: 24, PriceAmount: 49.00}, // June 2, 23:00-00:00
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		queryTime     time.Time
+		expectedPrice float64
+		shouldFind    bool
+	}{
+		// Test prices from first day
+		{
+			name:          "First day - hour 0 (00:00)",
+			queryTime:     time.Date(2024, 6, 1, 0, 30, 0, 0, time.UTC),
+			expectedPrice: 45.50,
+			shouldFind:    true,
+		},
+		{
+			name:          "First day - hour 1 (01:00)",
+			queryTime:     time.Date(2024, 6, 1, 1, 15, 0, 0, time.UTC),
+			expectedPrice: 42.30,
+			shouldFind:    true,
+		},
+		{
+			name:          "First day - hour 12 (12:00)",
+			queryTime:     time.Date(2024, 6, 1, 12, 45, 0, 0, time.UTC),
+			expectedPrice: 55.00,
+			shouldFind:    true,
+		},
+		{
+			name:          "First day - hour 13 (13:00)",
+			queryTime:     time.Date(2024, 6, 1, 13, 30, 0, 0, time.UTC),
+			expectedPrice: 60.00,
+			shouldFind:    true,
+		},
+		{
+			name:          "First day - hour 22 (22:00)",
+			queryTime:     time.Date(2024, 6, 1, 22, 0, 0, 0, time.UTC),
+			expectedPrice: 50.00,
+			shouldFind:    true,
+		},
+		{
+			name:          "First day - hour 23 (23:00)",
+			queryTime:     time.Date(2024, 6, 1, 23, 59, 0, 0, time.UTC),
+			expectedPrice: 48.00,
+			shouldFind:    true,
+		},
+		// Test prices from second day
+		{
+			name:          "Second day - hour 0 (00:00)",
+			queryTime:     time.Date(2024, 6, 2, 0, 30, 0, 0, time.UTC),
+			expectedPrice: 46.00,
+			shouldFind:    true,
+		},
+		{
+			name:          "Second day - hour 1 (01:00)",
+			queryTime:     time.Date(2024, 6, 2, 1, 15, 0, 0, time.UTC),
+			expectedPrice: 44.00,
+			shouldFind:    true,
+		},
+		{
+			name:          "Second day - hour 12 (12:00)",
+			queryTime:     time.Date(2024, 6, 2, 12, 45, 0, 0, time.UTC),
+			expectedPrice: 57.00,
+			shouldFind:    true,
+		},
+		{
+			name:          "Second day - hour 13 (13:00)",
+			queryTime:     time.Date(2024, 6, 2, 13, 30, 0, 0, time.UTC),
+			expectedPrice: 62.00,
+			shouldFind:    true,
+		},
+		{
+			name:          "Second day - hour 14 (14:00)",
+			queryTime:     time.Date(2024, 6, 2, 14, 0, 0, 0, time.UTC),
+			expectedPrice: 59.00,
+			shouldFind:    true,
+		},
+		{
+			name:          "Second day - hour 22 (22:00)",
+			queryTime:     time.Date(2024, 6, 2, 22, 30, 0, 0, time.UTC),
+			expectedPrice: 52.00,
+			shouldFind:    true,
+		},
+		// Test times outside the data range
+		{
+			name:          "Before first day",
+			queryTime:     time.Date(2024, 5, 31, 23, 30, 0, 0, time.UTC),
+			expectedPrice: 0.0,
+			shouldFind:    false,
+		},
+		{
+			name:          "After second day",
+			queryTime:     time.Date(2024, 6, 3, 0, 30, 0, 0, time.UTC),
+			expectedPrice: 0.0,
+			shouldFind:    false,
+		},
+		// Test hours without data in the sparse dataset
+		{
+			name:          "First day - hour 10 (no data)",
+			queryTime:     time.Date(2024, 6, 1, 10, 30, 0, 0, time.UTC),
+			expectedPrice: 0.0,
+			shouldFind:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			price, found := mergedDoc.LookupAveragePriceInHourByTime(tt.queryTime)
+
+			if found != tt.shouldFind {
+				t.Errorf("Expected found=%v, got %v", tt.shouldFind, found)
+			}
+
+			if found && price != tt.expectedPrice {
+				t.Errorf("Expected price %.2f, got %.2f", tt.expectedPrice, price)
+			}
+		})
+	}
+}

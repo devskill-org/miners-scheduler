@@ -286,7 +286,7 @@ func (s *StatsItem) UnmarshalJSON(data []byte) error {
 			}
 		case "WORKMODE":
 			if i, err := strconv.Atoi(value); err == nil {
-				stats.WorkMode = i
+				stats.WorkMode = AvalonWorkMode(i)
 			}
 		case "WORKLEVEL":
 			if i, err := strconv.Atoi(value); err == nil {
@@ -352,7 +352,9 @@ func getAddresses(network string) iter.Seq[netip.Addr] {
 }
 
 func (h *AvalonQHost) Standby(ctx context.Context) (string, error) {
-	h.SetWorkMode(ctx, AvalonEcoMode, true)
+	if _, err := h.SetWorkMode(ctx, AvalonEcoMode, true); err != nil {
+		return "", err
+	}
 	return send(ctx, h.Address, h.Port,
 		func(conn net.Conn) error {
 			_, err := fmt.Fprintf(conn, "ascset|0,softoff,1: %d", time.Now().Unix())
@@ -386,8 +388,8 @@ func (h *AvalonQHost) WakeUp(ctx context.Context) (string, error) {
 	)
 }
 
-func (h *AvalonQHost) GetLiteStats(ctx context.Context) (*AvalonQLiteStats, error) {
-	return send(ctx, h.Address, h.Port,
+func (h *AvalonQHost) RefreshLiteStats(ctx context.Context) {
+	stats, err := send(ctx, h.Address, h.Port,
 		func(conn net.Conn) error {
 			return writeCommand("litestats", conn)
 		},
@@ -398,6 +400,14 @@ func (h *AvalonQHost) GetLiteStats(ctx context.Context) (*AvalonQLiteStats, erro
 			}
 			return stats, nil
 		})
+	if len(stats.Stats) == 0 || stats.Stats[0].MMIDSummary == nil {
+		err = fmt.Errorf("invalid stats response for miner %s:%d", h.Address, h.Port)
+	}
+	if err != nil {
+		h.AddLiteStats(nil, err)
+		return
+	}
+	h.AddLiteStats(stats.Stats[0].MMIDSummary, err)
 }
 
 func version(ctx context.Context, address string, port int) (*AvalonQVersion, error) {

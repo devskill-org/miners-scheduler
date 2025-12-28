@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -11,6 +13,96 @@ import (
 	"github.com/devskill-org/miners-scheduler/entsoe"
 	"github.com/devskill-org/miners-scheduler/miners"
 )
+
+// mockEnergyPricesServer creates a mock HTTP server that returns valid energy prices XML
+func mockEnergyPricesServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return a valid XML response with prices
+		now := time.Now()
+		hourStart := now.Truncate(time.Hour)
+
+		xml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<Publication_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:0">
+    <mRID>test-document</mRID>
+    <revisionNumber>1</revisionNumber>
+    <type>A44</type>
+    <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</sender_MarketParticipant.mRID>
+    <sender_MarketParticipant.marketRole.type>A32</sender_MarketParticipant.marketRole.type>
+    <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</receiver_MarketParticipant.mRID>
+    <receiver_MarketParticipant.marketRole.type>A33</receiver_MarketParticipant.marketRole.type>
+    <createdDateTime>%s</createdDateTime>
+    <period.timeInterval>
+        <start>%s</start>
+        <end>%s</end>
+    </period.timeInterval>
+    <TimeSeries>
+        <mRID>1</mRID>
+        <businessType>A62</businessType>
+        <in_Domain.mRID codingScheme="A01">10YLV-1001A00074</in_Domain.mRID>
+        <out_Domain.mRID codingScheme="A01">10YLV-1001A00074</out_Domain.mRID>
+        <currency_Unit.name>EUR</currency_Unit.name>
+        <price_Measure_Unit.name>MWH</price_Measure_Unit.name>
+        <curveType>A01</curveType>
+        <Period>
+            <timeInterval>
+                <start>%s</start>
+                <end>%s</end>
+            </timeInterval>
+            <resolution>PT1H</resolution>
+            <Point>
+                <position>1</position>
+                <price.amount>45.50</price.amount>
+            </Point>
+            <Point>
+                <position>2</position>
+                <price.amount>42.00</price.amount>
+            </Point>
+            <Point>
+                <position>3</position>
+                <price.amount>48.75</price.amount>
+            </Point>
+        </Period>
+    </TimeSeries>
+</Publication_MarketDocument>`,
+			now.Format(time.RFC3339),
+			hourStart.Add(-1*time.Hour).Format(time.RFC3339),
+			hourStart.Add(3*time.Hour).Format(time.RFC3339),
+			hourStart.Add(-1*time.Hour).Format(time.RFC3339),
+			hourStart.Add(3*time.Hour).Format(time.RFC3339))
+
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(xml))
+	}))
+}
+
+// testConfig creates a basic config for testing with all required fields
+func testConfig() *Config {
+	return testConfigWithServer(nil)
+}
+
+// testConfigWithServer creates a test config that uses the provided mock server
+func testConfigWithServer(server *httptest.Server) *Config {
+	urlFormat := "https://example.com/api?periodStart=%s&periodEnd=%s&token=%s"
+	if server != nil {
+		urlFormat = server.URL + "?periodStart=%s&periodEnd=%s&token=%s"
+	}
+
+	return &Config{
+		PriceLimit:               50.0,
+		Network:                  "192.168.1.0/24",
+		CheckPriceInterval:       time.Minute,
+		MinersStateCheckInterval: time.Minute,
+		MinerDiscoveryInterval:   10 * time.Minute,
+		PVPollInterval:           10 * time.Second,
+		PVIntegrationPeriod:      15 * time.Minute,
+		APITimeout:               5 * time.Second,
+		MinerTimeout:             5 * time.Second,
+		Location:                 "Europe/Riga",
+		SecurityToken:            "test-token",
+		UrlFormat:                urlFormat,
+	}
+}
 
 func TestNewMinerScheduler(t *testing.T) {
 	tests := []struct {
@@ -87,13 +179,10 @@ func TestDryRunConfiguration(t *testing.T) {
 }
 
 func TestSchedulerRunningState(t *testing.T) {
-	scheduler := NewMinerScheduler(&Config{
-		PriceLimit:               50.0,
-		Network:                  "192.168.1.0/24",
-		CheckPriceInterval:       time.Minute,
-		MinersStateCheckInterval: time.Minute,
-		MinerDiscoveryInterval:   10 * time.Minute,
-	}, nil)
+	mockServer := mockEnergyPricesServer()
+	defer mockServer.Close()
+
+	scheduler := NewMinerScheduler(testConfigWithServer(mockServer), nil)
 
 	// Initially not running
 	if scheduler.IsRunning() {
@@ -135,13 +224,10 @@ func TestSchedulerRunningState(t *testing.T) {
 }
 
 func TestSchedulerDoubleStart(t *testing.T) {
-	scheduler := NewMinerScheduler(&Config{
-		PriceLimit:               50.0,
-		Network:                  "192.168.1.0/24",
-		CheckPriceInterval:       time.Minute,
-		MinersStateCheckInterval: time.Minute,
-		MinerDiscoveryInterval:   10 * time.Minute,
-	}, nil)
+	mockServer := mockEnergyPricesServer()
+	defer mockServer.Close()
+
+	scheduler := NewMinerScheduler(testConfigWithServer(mockServer), nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -166,13 +252,10 @@ func TestSchedulerDoubleStart(t *testing.T) {
 }
 
 func TestSchedulerStop(t *testing.T) {
-	scheduler := NewMinerScheduler(&Config{
-		PriceLimit:               50.0,
-		Network:                  "192.168.1.0/24",
-		CheckPriceInterval:       time.Minute,
-		MinersStateCheckInterval: time.Minute,
-		MinerDiscoveryInterval:   10 * time.Minute,
-	}, nil)
+	mockServer := mockEnergyPricesServer()
+	defer mockServer.Close()
+
+	scheduler := NewMinerScheduler(testConfigWithServer(mockServer), nil)
 	ctx := context.Background()
 
 	// Start scheduler
@@ -205,13 +288,7 @@ func TestSchedulerStop(t *testing.T) {
 }
 
 func TestGetDiscoveredMiners(t *testing.T) {
-	scheduler := NewMinerScheduler(&Config{
-		PriceLimit:               50.0,
-		Network:                  "192.168.1.0/24",
-		CheckPriceInterval:       time.Minute,
-		MinersStateCheckInterval: time.Minute,
-		MinerDiscoveryInterval:   10 * time.Minute,
-	}, nil)
+	scheduler := NewMinerScheduler(testConfig(), nil)
 
 	// Initially empty
 	minersList := scheduler.GetDiscoveredMiners()
@@ -250,13 +327,9 @@ func TestGetDiscoveredMiners(t *testing.T) {
 }
 
 func TestDiscoverMinersPreservesExisting(t *testing.T) {
-	scheduler := NewMinerScheduler(&Config{
-		PriceLimit:               50.0,
-		Network:                  "127.0.0.1/32",
-		CheckPriceInterval:       time.Minute,
-		MinersStateCheckInterval: time.Minute,
-		MinerDiscoveryInterval:   10 * time.Minute,
-	}, nil)
+	config := testConfig()
+	config.Network = "127.0.0.1/32"
+	scheduler := NewMinerScheduler(config, nil)
 
 	// Mock some initial miners
 	initialMiners := []*miners.AvalonQHost{
@@ -284,60 +357,24 @@ func TestDiscoverMinersPreservesExisting(t *testing.T) {
 		t.Errorf("Expected %d miners after discovery, got %d", len(initialMiners), len(finalMiners))
 	}
 
-	// Check that the exact same miners are still there
-	for i, expectedMiner := range initialMiners {
-		if finalMiners[i].Address != expectedMiner.Address || finalMiners[i].Port != expectedMiner.Port {
-			t.Errorf("Expected miner %d to be %s:%d, got %s:%d",
-				i, expectedMiner.Address, expectedMiner.Port,
-				finalMiners[i].Address, finalMiners[i].Port)
+	// Check that the exact same miners are still there (order doesn't matter since they come from a map)
+	minerMap := make(map[string]bool)
+	for _, miner := range finalMiners {
+		key := fmt.Sprintf("%s:%d", miner.Address, miner.Port)
+		minerMap[key] = true
+	}
+
+	for _, expectedMiner := range initialMiners {
+		key := fmt.Sprintf("%s:%d", expectedMiner.Address, expectedMiner.Port)
+		if !minerMap[key] {
+			t.Errorf("Expected miner %s:%d to be present, but it was not found",
+				expectedMiner.Address, expectedMiner.Port)
 		}
 	}
 }
 
-func TestGetLatestDocument(t *testing.T) {
-	scheduler := NewMinerScheduler(&Config{
-		PriceLimit:               50.0,
-		Network:                  "192.168.1.0/24",
-		CheckPriceInterval:       time.Minute,
-		MinersStateCheckInterval: time.Minute,
-		MinerDiscoveryInterval:   10 * time.Minute,
-	}, nil)
-
-	// Initially nil
-	doc := scheduler.GetLatestDocument()
-	if doc != nil {
-		t.Error("Expected nil document initially")
-	}
-
-	// Mock a document
-	mockDoc := &entsoe.PublicationMarketDocument{
-		MRID: "test-document",
-	}
-
-	scheduler.mu.Lock()
-	scheduler.latestDocument = mockDoc
-	scheduler.mu.Unlock()
-
-	// Test getting document
-	retrievedDoc := scheduler.GetLatestDocument()
-	if retrievedDoc == nil {
-		t.Error("Expected document, got nil")
-	}
-
-	if retrievedDoc.MRID != mockDoc.MRID {
-		t.Errorf("Expected MRID %s, got %s", mockDoc.MRID, retrievedDoc.MRID)
-	}
-}
-
 func TestGetStatus(t *testing.T) {
-
-	scheduler := NewMinerScheduler(&Config{
-		PriceLimit:               50.0,
-		Network:                  "192.168.1.0/24",
-		CheckPriceInterval:       time.Minute,
-		MinersStateCheckInterval: time.Minute,
-		MinerDiscoveryInterval:   10 * time.Minute,
-	}, nil)
+	scheduler := NewMinerScheduler(testConfig(), nil)
 
 	status := scheduler.GetStatus()
 
@@ -349,23 +386,13 @@ func TestGetStatus(t *testing.T) {
 		t.Errorf("Expected miners count 0, got %d", status.MinersCount)
 	}
 
-	if status.HasLatestDoc {
-		t.Error("Expected has latest document false")
-	}
-
-	if status.LastDocumentTime != nil {
-		t.Error("Expected nil last document time")
+	if status.HasMarketData {
+		t.Error("Expected has no market data")
 	}
 }
 
 func TestSchedulerStatus_WithData(t *testing.T) {
-	scheduler := NewMinerScheduler(&Config{
-		PriceLimit:               50.0,
-		Network:                  "192.168.1.0/24",
-		CheckPriceInterval:       time.Minute,
-		MinersStateCheckInterval: time.Minute,
-		MinerDiscoveryInterval:   10 * time.Minute,
-	}, nil)
+	scheduler := NewMinerScheduler(testConfig(), nil)
 
 	// Add some mock data
 	mockMiners := []*miners.AvalonQHost{
@@ -373,7 +400,7 @@ func TestSchedulerStatus_WithData(t *testing.T) {
 		{Address: "192.168.1.101", Port: 4028},
 	}
 
-	mockDoc := &entsoe.PublicationMarketDocument{
+	mockDoc := &entsoe.PublicationMarketData{
 		MRID:            "test-doc",
 		CreatedDateTime: "2024-01-15T10:30:00Z",
 	}
@@ -384,7 +411,7 @@ func TestSchedulerStatus_WithData(t *testing.T) {
 		key := fmt.Sprintf("%s:%d", miner.Address, miner.Port)
 		scheduler.discoveredMiners[key] = miner
 	}
-	scheduler.latestDocument = mockDoc
+	scheduler.pricesMarketData = mockDoc
 	scheduler.mu.Unlock()
 
 	status := scheduler.GetStatus()
@@ -393,29 +420,13 @@ func TestSchedulerStatus_WithData(t *testing.T) {
 		t.Errorf("Expected miners count %d, got %d", len(mockMiners), status.MinersCount)
 	}
 
-	if !status.HasLatestDoc {
-		t.Error("Expected has latest document true")
-	}
-
-	if status.LastDocumentTime == nil {
-		t.Error("Expected non-nil last document time")
-	} else {
-		expected := "2024-01-15T10:30:00Z"
-		if status.LastDocumentTime.Format(time.RFC3339) != expected {
-			t.Errorf("Expected document time %s, got %s",
-				expected, status.LastDocumentTime.Format(time.RFC3339))
-		}
+	if !status.HasMarketData {
+		t.Error("Expected has market data")
 	}
 }
 
 func TestSchedulerConcurrency(t *testing.T) {
-	scheduler := NewMinerScheduler(&Config{
-		PriceLimit:               50.0,
-		Network:                  "192.168.1.0/24",
-		CheckPriceInterval:       time.Minute,
-		MinersStateCheckInterval: time.Minute,
-		MinerDiscoveryInterval:   10 * time.Minute,
-	}, nil)
+	scheduler := NewMinerScheduler(testConfig(), nil)
 
 	// Test concurrent access to methods
 	done := make(chan bool, 10)
@@ -455,13 +466,7 @@ func TestSchedulerConcurrency(t *testing.T) {
 
 // Benchmark tests
 func BenchmarkSchedulerGetStatus(b *testing.B) {
-	scheduler := NewMinerScheduler(&Config{
-		PriceLimit:               50.0,
-		Network:                  "192.168.1.0/24",
-		CheckPriceInterval:       time.Minute,
-		MinersStateCheckInterval: time.Minute,
-		MinerDiscoveryInterval:   10 * time.Minute,
-	}, nil)
+	scheduler := NewMinerScheduler(testConfig(), nil)
 
 	// Add some mock data
 	mockMiners := make([]*miners.AvalonQHost, 100)
@@ -599,7 +604,7 @@ func TestGetInitialDelay(t *testing.T) {
 			}
 			scheduler := NewMinerScheduler(config, nil)
 
-			actualDelay := scheduler.getInitialDelay(tt.now)
+			actualDelay := scheduler.getInitialDelay(tt.now, tt.priceCheckInterval)
 
 			if actualDelay != tt.expectedDelay {
 				t.Errorf("Expected delay %v, got %v", tt.expectedDelay, actualDelay)
@@ -619,7 +624,7 @@ func TestGetInitialDelay(t *testing.T) {
 }
 
 func BenchmarkSchedulerGetDiscoveredMiners(b *testing.B) {
-	scheduler := NewMinerScheduler(&Config{PriceLimit: 50.0, Network: "192.168.1.0/24", CheckPriceInterval: time.Minute, MinerDiscoveryInterval: 10 * time.Minute}, nil)
+	scheduler := NewMinerScheduler(testConfig(), nil)
 
 	// Add mock miners
 	mockMiners := make([]*miners.AvalonQHost, 1000)

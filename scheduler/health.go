@@ -29,7 +29,7 @@ type SchedulerHealth struct {
 	IsRunning          bool       `json:"is_running"`
 	MinersCount        int        `json:"miners_count"`
 	LastCheck          *time.Time `json:"last_check,omitempty"`
-	HasLatestDoc       bool       `json:"has_latest_document"`
+	HasMarketData      bool       `json:"has_market_data"`
 	LastDocumentTime   *time.Time `json:"last_document_time,omitempty"`
 	PriceLimit         float64    `json:"price_limit"`
 	Network            string     `json:"network"`
@@ -110,12 +110,11 @@ func (hs *HealthServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Version:   "1.0.0",
 		Scheduler: SchedulerHealth{
-			IsRunning:        status.IsRunning,
-			MinersCount:      status.MinersCount,
-			HasLatestDoc:     status.HasLatestDoc,
-			LastDocumentTime: status.LastDocumentTime,
-			PriceLimit:       hs.scheduler.GetConfig().PriceLimit,
-			Network:          hs.scheduler.GetConfig().Network,
+			IsRunning:     status.IsRunning,
+			MinersCount:   status.MinersCount,
+			HasMarketData: status.HasMarketData,
+			PriceLimit:    hs.scheduler.GetConfig().PriceLimit,
+			Network:       hs.scheduler.GetConfig().Network,
 		},
 		System: SystemHealth{
 			Uptime:     time.Since(time.Now().Add(-time.Hour)).String(), // Placeholder
@@ -130,7 +129,9 @@ func (hs *HealthServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(health)
+	if err := json.NewEncoder(w).Encode(health); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // readinessHandler handles the /ready endpoint
@@ -153,7 +154,9 @@ func (hs *HealthServer) readinessHandler(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 
-	json.NewEncoder(w).Encode(ready)
+	if err := json.NewEncoder(w).Encode(ready); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // statusHandler handles the /status endpoint (detailed status)
@@ -165,7 +168,7 @@ func (hs *HealthServer) statusHandler(w http.ResponseWriter, r *http.Request) {
 
 	status := hs.scheduler.GetStatus()
 	miners := hs.scheduler.GetDiscoveredMiners()
-	doc := hs.scheduler.GetLatestDocument()
+	doc, _ := hs.scheduler.GetMarketData(r.Context())
 
 	response := map[string]any{
 		"scheduler_status": status,
@@ -196,7 +199,9 @@ func (hs *HealthServer) statusHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // rootHandler handles the root endpoint
@@ -226,17 +231,12 @@ func (hs *HealthServer) rootHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // Helper functions
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
-}
 
 func getPriceAction(currentPrice, priceLimit float64) string {
 	if currentPrice <= priceLimit {

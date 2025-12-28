@@ -1,5 +1,11 @@
 # Miners Scheduler
 
+[![Tests](https://github.com/devskill-org/miners-scheduler/actions/workflows/test.yml/badge.svg)](https://github.com/devskill-org/miners-scheduler/actions/workflows/test.yml)
+[![Coverage](https://codecov.io/gh/devskill-org/miners-scheduler/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/miners-scheduler)
+[![Go Report Card](https://goreportcard.com/badge/github.com/devskill-org/miners-scheduler)](https://goreportcard.com/report/github.com/devskill-org/miners-scheduler)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/devskill-org/miners-scheduler)](https://github.com/devskill-org/miners-scheduler/blob/main/go.mod)
+[![License](https://img.shields.io/github/license/devskill-org/miners-scheduler)](https://github.com/devskill-org/miners-scheduler/blob/main/LICENSE)
+
 A Go application that automatically manages Avalon miners based on electricity price data from the ENTSO-E Transparency Platform API. The scheduler periodically checks electricity prices and controls miners to optimize mining operations during low-cost periods.
 
 ## Features

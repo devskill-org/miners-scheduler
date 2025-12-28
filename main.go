@@ -10,12 +10,14 @@ import (
 	"syscall"
 
 	"github.com/devskill-org/miners-scheduler/scheduler"
+	"github.com/devskill-org/miners-scheduler/sigenergy"
 )
 
 func main() {
 	// Command line flags
 	var (
 		configFile = flag.String("config", "config.json", "Configuration file path")
+		info       = flag.Bool("info", false, "Show Plant Information")
 		help       = flag.Bool("help", false, "Show help message")
 	)
 	flag.Parse()
@@ -31,6 +33,13 @@ func main() {
 		return
 	}
 
+	if *info {
+		if err := sigenergy.ShowPlantInfo(config.PlantModbusAddress); err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
+		return
+	}
 	fmt.Printf("Starting miners-scheduler with the following configuration:\n")
 	fmt.Printf("  Price Limit: %.2f EUR/MWh\n", config.PriceLimit)
 	fmt.Printf("  Network: %s\n", config.Network)
