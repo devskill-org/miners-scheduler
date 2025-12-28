@@ -1,0 +1,71 @@
+version: "2"
+
+run:
+  # General run options
+  timeout: "5m"
+  tests: true
+  issues-exit-code: 1
+  allow-parallel-runners: false
+  allow-serial-runners: false
+  go: "1.22"
+  relative-path-mode: wd
+
+output:
+  show-stats: true
+  path-prefix: ""
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
+
+linters:
+  # Start from the standard set and tweak from there
+  default: standard
+
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - gocyclo
+    - revive
+    - gosec
+    - unused
+    - nolintlint
+
+  disable:
+    # Often too noisy for many projects, can be enabled later if desired
+    - depguard
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    gocyclo:
+      min-complexity: 15
+    revive:
+      enable-default-rules: true
+    unused:
+      field-writes-are-uses: true
+      post-statements-are-reads: false
+      exported-fields-are-used: true
+      parameters-are-used: true
+      local-variables-are-used: true
+      generated-is-used: true
+    nolintlint:
+      allow-unused: true
+      require-explanation: false
+      require-specific: false
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
+  uniq-by-line: true
+  whole-files: false
+
+severity:
+  # Schema requires this field even if you don't customize severities
+  default: ""
