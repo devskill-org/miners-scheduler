@@ -72,6 +72,16 @@ func (p *PVSamples) IsEmpty() bool {
 	return len(p.samples) == 0
 }
 
+// GetLatestPower returns the most recent PV power sample, or 0 if no samples exist
+func (p *PVSamples) GetLatestPower() float64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.samples) == 0 {
+		return 0
+	}
+	return p.samples[len(p.samples)-1].value
+}
+
 func (s *MinerScheduler) runPVPoll(samples *PVSamples) {
 	if s.config.PlantModbusAddress == "" {
 		return
@@ -165,4 +175,28 @@ func (s *MinerScheduler) fetchCloudCoverage() (*float64, error) {
 	}
 
 	return current.GetCloudCoverage(), nil
+}
+
+// GetCurrentPVPower returns the current PV power in kW
+// If PlantModbusAddress is not configured, returns 0
+func (s *MinerScheduler) GetCurrentPVPower() float64 {
+	if s.config.PlantModbusAddress == "" {
+		return 0
+	}
+
+	client, err := sigenergy.NewTCPClient(s.config.PlantModbusAddress, sigenergy.PlantAddress)
+	if err != nil {
+		s.logger.Printf("Failed to create modbus client for PV power: %v", err)
+		return 0
+	}
+	defer client.Close()
+
+	info, err := client.ReadPlantRunningInfo()
+	if err != nil {
+		s.logger.Printf("Failed to read PV power: %v", err)
+		return 0
+	}
+
+	// Return power in kW
+	return info.PhotovoltaicPower
 }

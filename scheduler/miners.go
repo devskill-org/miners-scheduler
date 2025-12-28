@@ -47,6 +47,36 @@ func (s *MinerScheduler) runMinerDiscovery(ctx context.Context) {
 	s.logger.Printf("Miner discovery task completed successfully")
 }
 
+// getMinerPowerConsumption returns the power consumption in kW for a given miner state and work mode
+func (s *MinerScheduler) getMinerPowerConsumption(state miners.AvalonState, workMode miners.AvalonWorkMode) float64 {
+	if state == miners.AvalonStateStandBy {
+		return s.config.MinerPowerStandby
+	}
+
+	switch workMode {
+	case miners.AvalonEcoMode:
+		return s.config.MinerPowerEco
+	case miners.AvalonStandardMode:
+		return s.config.MinerPowerStandard
+	case miners.AvalonSuperMode:
+		return s.config.MinerPowerSuper
+	default:
+		return s.config.MinerPowerStandby
+	}
+}
+
+// calculateTotalPowerConsumption calculates total power consumption of all miners in kW
+func (s *MinerScheduler) calculateTotalPowerConsumption(minersList []*miners.AvalonQHost) float64 {
+	var totalPower float64
+	for _, miner := range minersList {
+		if miner.LastStatsError == nil && miner.LastStats != nil {
+			power := s.getMinerPowerConsumption(miner.LastStats.State, miner.LastStats.WorkMode)
+			totalPower += power
+		}
+	}
+	return totalPower
+}
+
 // refreshMinersState refreshes the state of all discovered miners and returns miners list
 func (s *MinerScheduler) refreshMinersState(ctx context.Context) []*miners.AvalonQHost {
 	var wg sync.WaitGroup
@@ -64,7 +94,20 @@ func (s *MinerScheduler) refreshMinersState(ctx context.Context) []*miners.Avalo
 	return minersList
 }
 
-// manageMiners manages miner states based on current price vs price limit
+func (s *MinerScheduler) getEffecivePowerLimit() float64 {
+	availablePower := s.GetCurrentPVPower() // in kW
+	powerLimit := s.config.MinersPowerLimit // in kW
+	s.logger.Printf("PV Power Control: Available PV power: %.2f kW, Miners power limit: %.2f kW", availablePower, powerLimit)
+
+	// Use the minimum of available PV power and configured power limit
+	effectiveLimit := powerLimit
+	if availablePower < powerLimit {
+		effectiveLimit = availablePower
+	}
+	return effectiveLimit
+}
+
+// manageMiners manages miner states based on current price vs price limit and power consumption
 func (s *MinerScheduler) manageMiners(ctx context.Context, currentPrice float64) error {
 	priceLimit := s.config.PriceLimit
 	minersList := s.refreshMinersState(ctx)
@@ -79,7 +122,20 @@ func (s *MinerScheduler) manageMiners(ctx context.Context, currentPrice float64)
 		s.logger.Printf("DRY-RUN MODE: Actions will be simulated only")
 	}
 
+	// Check if PV power control is enabled
+	usePowerControl := s.config.UsePVPowerControl
+	var effectiveLimit float64
+	var totalPower float64
+
+	if usePowerControl {
+		effectiveLimit = s.getEffecivePowerLimit()
+		totalPower = s.calculateTotalPowerConsumption(minersList)
+		s.logger.Printf("Current total power consumption: %.2f kW, Effective limit: %.2f kW", totalPower, effectiveLimit)
+	}
+
+	// Standard price-based control
 	var wg sync.WaitGroup
+	var powerMu sync.Mutex // Mutex to protect totalPower updates
 	errChan := make(chan error, len(minersList))
 
 	for _, miner := range minersList {
@@ -98,21 +154,44 @@ func (s *MinerScheduler) manageMiners(ctx context.Context, currentPrice float64)
 
 			// Decision logic based on price comparison
 			if currentPrice <= priceLimit {
-				// Price is low enough - wake up miners
+				// Price is low enough - wake up miners (if power allows)
 				if currentState == miners.AvalonStateStandBy {
+					// Check if we have power budget for waking up this miner
+					if usePowerControl {
+						additionalPower := s.config.MinerPowerEco // Wake up in Eco mode
+
+						// Lock to safely check and update totalPower
+						powerMu.Lock()
+						if totalPower+additionalPower > effectiveLimit {
+							s.logger.Printf("Miner %s:%d cannot wake up: would exceed power limit (%.2f + %.2f > %.2f kW)",
+								m.Address, m.Port, totalPower, additionalPower, effectiveLimit)
+							powerMu.Unlock()
+							return
+						}
+						// Reserve power for this miner
+						totalPower += additionalPower
+						powerMu.Unlock()
+					}
+
 					if isDryRun {
 						s.logger.Printf("DRY-RUN: Would wake up miner %s:%d (price %.2f <= limit %.2f)",
 							m.Address, m.Port, currentPrice, priceLimit)
-					} else {
-						s.logger.Printf("Price (%.2f) <= limit (%.2f), waking up miner %s:%d",
-							currentPrice, priceLimit, m.Address, m.Port)
+						return
+					}
+					s.logger.Printf("Price (%.2f) <= limit (%.2f), waking up miner %s:%d",
+						currentPrice, priceLimit, m.Address, m.Port)
 
-						response, err := m.WakeUp(ctx)
-						if err != nil {
-							errChan <- fmt.Errorf("failed to wake up miner %s:%d: %w", m.Address, m.Port, err)
-							return
-						}
-						s.logger.Printf("WakeUp response for miner %s:%d: %s", m.Address, m.Port, response)
+					response, err := m.WakeUp(ctx)
+					if err != nil {
+						errChan <- fmt.Errorf("failed to wake up miner %s:%d: %w", m.Address, m.Port, err)
+						return
+					}
+					s.logger.Printf("WakeUp response for miner %s:%d: %s", m.Address, m.Port, response)
+					// Reserve power for this miner
+					if usePowerControl {
+						powerMu.Lock()
+						totalPower += s.config.MinerPowerEco
+						powerMu.Unlock()
 					}
 				} else {
 					s.logger.Printf("Miner %s:%d is already in %s state, no action needed",
@@ -133,6 +212,16 @@ func (s *MinerScheduler) manageMiners(ctx context.Context, currentPrice float64)
 							errChan <- fmt.Errorf("failed to put miner %s:%d into standby: %w", m.Address, m.Port, err)
 							return
 						}
+
+						// Update totalPower after successful standby
+						if usePowerControl {
+							powerMu.Lock()
+							releasedPower := s.getMinerPowerConsumption(currentState, m.LastStats.WorkMode)
+							totalPower -= releasedPower
+							totalPower += s.config.MinerPowerStandby
+							powerMu.Unlock()
+						}
+
 						s.logger.Printf("Standby response for miner %s:%d: %s", m.Address, m.Port, response)
 					}
 				} else {
@@ -169,6 +258,38 @@ func (s *MinerScheduler) manageMiners(ctx context.Context, currentPrice float64)
 	return nil
 }
 
+// controlMiner returns a new miner state and mode
+func (s *MinerScheduler) controlMiner(m *miners.AvalonQHost, totalPower float64, effectiveLimit float64) (miners.AvalonState, miners.AvalonWorkMode) {
+	fanR := m.LastStats.FanR
+	currentWorkMode := miners.AvalonWorkMode(m.LastStats.WorkMode)
+	currentState := m.LastStats.State
+	if fanR > s.config.FanRHighThreshold || totalPower > effectiveLimit {
+		// Decrease work mode
+		newWorkMode := currentWorkMode - 1
+		newTotalPower := totalPower - s.getMinerPowerConsumption(currentState, currentWorkMode) + s.getMinerPowerConsumption(currentState, newWorkMode)
+		if newWorkMode < 0 || newTotalPower > effectiveLimit {
+			return miners.AvalonStateStandBy, miners.AvalonEcoMode
+		}
+		return currentState, newWorkMode
+	} else if fanR < s.config.FanRLowThreshold && totalPower <= effectiveLimit {
+		// Increase work mode only if all LiteStatsHistory fanR values match criteria
+		if len(m.LiteStatsHistory) < 5 || currentWorkMode == miners.AvalonSuperMode {
+			return currentState, currentWorkMode
+		}
+		for _, stat := range m.LiteStatsHistory {
+			if stat.FanR >= s.config.FanRLowThreshold {
+				return currentState, currentWorkMode
+			}
+		}
+		newWorkMode := currentWorkMode + 1
+		newTotalPower := totalPower - s.getMinerPowerConsumption(currentState, currentWorkMode) + s.getMinerPowerConsumption(currentState, newWorkMode)
+		if newTotalPower <= effectiveLimit {
+			return currentState, newWorkMode
+		}
+	}
+	return currentState, currentWorkMode
+}
+
 // runStateCheck executes the state monitoring task for miners
 func (s *MinerScheduler) runStateCheck(ctx context.Context) {
 	minersList := s.refreshMinersState(ctx)
@@ -178,7 +299,19 @@ func (s *MinerScheduler) runStateCheck(ctx context.Context) {
 
 	isDryRun := s.config.DryRun
 
+	// Check if PV power control is enabled
+	usePowerControl := s.config.UsePVPowerControl
+	var effectiveLimit float64
+	var totalPower float64
+
+	if usePowerControl {
+		effectiveLimit = s.getEffecivePowerLimit()
+		totalPower = s.calculateTotalPowerConsumption(minersList)
+		s.logger.Printf("Current total power consumption: %.2f kW, Effective limit: %.2f kW", totalPower, effectiveLimit)
+	}
+
 	var wg sync.WaitGroup
+	var powerMu sync.Mutex // Mutex to protect totalPower updates
 	errChan := make(chan error, len(minersList))
 
 	for _, miner := range minersList {
@@ -193,7 +326,7 @@ func (s *MinerScheduler) runStateCheck(ctx context.Context) {
 			}
 
 			fanR := m.LastStats.FanR
-			currentWorkMode := m.LastStats.WorkMode
+			currentWorkMode := miners.AvalonWorkMode(m.LastStats.WorkMode)
 			currentState := m.LastStats.State
 			hbiTemp := m.LastStats.HBITemp
 			hboTemp := m.LastStats.HBOTemp
@@ -212,81 +345,41 @@ func (s *MinerScheduler) runStateCheck(ctx context.Context) {
 				iTemp,
 				currentWorkMode)
 
-			if fanR > s.config.FanRHighThreshold {
-				// Decrease work mode
-				if currentWorkMode == int(miners.AvalonSuperMode) {
-					// Super -> Standard
-					if isDryRun {
-						s.logger.Printf("DRY-RUN: Would set miner %s:%d to Standard mode (FanR %d%% > %d%%)",
-							m.Address, m.Port, fanR, s.config.FanRHighThreshold)
-					} else {
-						s.logger.Printf("FanR (%d%%) > %d%%, setting miner %s:%d to Standard work mode",
-							fanR, s.config.FanRHighThreshold, m.Address, m.Port)
-						response, err := m.SetWorkMode(ctx, miners.AvalonStandardMode, false)
-						if err != nil {
-							errChan <- fmt.Errorf("failed to set miner %s:%d to Standard mode: %w", m.Address, m.Port, err)
-							return
-						}
-						s.logger.Printf("SetWorkMode response for miner %s:%d: %s", m.Address, m.Port, response)
+			powerMu.Lock()
+			newState, newMode := s.controlMiner(m, totalPower, effectiveLimit)
+			powerMu.Unlock()
+			if newState == currentState && newMode == currentWorkMode {
+				return
+			}
+			if isDryRun {
+				s.logger.Printf("DRY-RUN: Would set miner %s:%d to set %s state and %d mode (FanR %d%%)",
+					m.Address, m.Port, newState.String(), newMode, fanR)
+			} else {
+				var response string
+				var err error
+				if newState != currentState {
+					if newState == miners.AvalonStateMining {
+						response, err = m.WakeUp(ctx)
 					}
-				} else if currentWorkMode == int(miners.AvalonStandardMode) {
-					// Standard -> Eco
-					if isDryRun {
-						s.logger.Printf("DRY-RUN: Would set miner %s:%d to Eco mode (FanR %d%% > %d%%)",
-							m.Address, m.Port, fanR, s.config.FanRHighThreshold)
-					} else {
-						s.logger.Printf("FanR (%d%%) > %d%%, setting miner %s:%d to Eco work mode",
-							fanR, s.config.FanRHighThreshold, m.Address, m.Port)
-						response, err := m.SetWorkMode(ctx, miners.AvalonEcoMode, false)
-						if err != nil {
-							errChan <- fmt.Errorf("failed to set miner %s:%d to Eco mode: %w", m.Address, m.Port, err)
-							return
-						}
-						s.logger.Printf("SetWorkMode response for miner %s:%d: %s", m.Address, m.Port, response)
+					if newState == miners.AvalonStateStandBy {
+						response, err = m.Standby(ctx)
 					}
 				}
-			} else if fanR < s.config.FanRLowThreshold {
-				// Increase work mode only if all LiteStatsHistory fanR values match criteria
-				if len(miner.LiteStatsHistory) < 5 {
+				if newMode != currentWorkMode {
+					response, err = m.SetWorkMode(ctx, newMode, newMode > currentWorkMode)
+				}
+				s.logger.Printf("Control miner %s:%d to set %s state and %d mode (FanR %d%%)",
+					m.Address, m.Port, newState.String(), newMode, fanR)
+				if err != nil {
+					errChan <- fmt.Errorf("failed to control miner %s:%d: %w", m.Address, m.Port, err)
 					return
 				}
-				for _, stat := range miner.LiteStatsHistory {
-					if stat.FanR >= s.config.FanRLowThreshold {
-						return
-					}
-				}
-				if currentWorkMode == int(miners.AvalonEcoMode) {
-					// Eco -> Standard
-					if isDryRun {
-						s.logger.Printf("DRY-RUN: Would set miner %s:%d to Standard mode (all FanR < %d%%)",
-							m.Address, m.Port, s.config.FanRLowThreshold)
-					} else {
-						s.logger.Printf("All FanR < %d%%, setting miner %s:%d to Standard work mode",
-							s.config.FanRLowThreshold, m.Address, m.Port)
-						response, err := m.SetWorkMode(ctx, miners.AvalonStandardMode, true)
-						if err != nil {
-							errChan <- fmt.Errorf("failed to set miner %s:%d to Standard mode: %w", m.Address, m.Port, err)
-							return
-						}
-						s.logger.Printf("SetWorkMode response for miner %s:%d: %s", m.Address, m.Port, response)
-					}
-				} else if currentWorkMode == int(miners.AvalonStandardMode) {
-					// Standard -> Super
-					if isDryRun {
-						s.logger.Printf("DRY-RUN: Would set miner %s:%d to Super mode (all FanR < %d%%)",
-							m.Address, m.Port, s.config.FanRLowThreshold)
-					} else {
-						s.logger.Printf("All FanR < %d%%, setting miner %s:%d to Super work mode",
-							s.config.FanRLowThreshold, m.Address, m.Port)
-						response, err := m.SetWorkMode(ctx, miners.AvalonSuperMode, true)
-						if err != nil {
-							errChan <- fmt.Errorf("failed to set miner %s:%d to Super mode: %w", m.Address, m.Port, err)
-							return
-						}
-						s.logger.Printf("SetWorkMode response for miner %s:%d: %s", m.Address, m.Port, response)
-					}
-				}
-				// If already Super, do nothing
+				powerMu.Lock()
+				totalPower += s.getMinerPowerConsumption(newState, newMode) - s.getMinerPowerConsumption(currentState, currentWorkMode)
+				s.logger.Printf("Current total power consumption: %.2f kW, Effective limit: %.2f kW", totalPower, effectiveLimit)
+				powerMu.Unlock()
+				s.logger.Printf("Control response for miner %s:%d: %s", m.Address, m.Port, response)
+
 			}
 		}(miner)
 	}

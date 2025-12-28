@@ -106,6 +106,7 @@ func (s *MinerScheduler) Start(ctx context.Context) error {
 		return fmt.Errorf("scheduler is already running")
 	}
 	s.isRunning = true
+	s.stopChan = make(chan struct{})
 	s.mu.Unlock()
 
 	if s.config.DryRun {
@@ -149,11 +150,17 @@ func (s *MinerScheduler) Start(ctx context.Context) error {
 	s.logger.Printf("Schedule next miners check for %v", now.Add(minersControlInitialDelay))
 	s.logger.Printf("Schedule next PV data collection for %v", now.Add(pvDataInitialDelay))
 
-	pvTicker := time.NewTicker(config.PVPollInterval)
-	defer pvTicker.Stop()
-
-	pvResetTicker := time.NewTicker(config.PVIntegrationPeriod)
-	defer pvResetTicker.Stop()
+	// Only create PV tickers if intervals are configured
+	var pvTicker *time.Ticker
+	var pvResetTicker *time.Ticker
+	if config.PVPollInterval > 0 {
+		pvTicker = time.NewTicker(config.PVPollInterval)
+		defer pvTicker.Stop()
+	}
+	if config.PVIntegrationPeriod > 0 {
+		pvResetTicker = time.NewTicker(config.PVIntegrationPeriod)
+		defer pvResetTicker.Stop()
+	}
 
 	priceCheckTicker := time.NewTicker(config.CheckPriceInterval)
 	defer priceCheckTicker.Stop()
@@ -185,10 +192,16 @@ func (s *MinerScheduler) Start(ctx context.Context) error {
 			priceCheckTicker.Reset(config.CheckPriceInterval)
 			minersControlInitialDelayPassed = true
 		case <-pvDataInitialDelayTick:
-			go s.runPVPoll(pvSamples)
-			pvTicker.Reset(config.PVPollInterval)
-			pvResetTicker.Reset(config.PVIntegrationPeriod)
-			pvDataInitialDelayPassed = true
+			if config.PVPollInterval > 0 {
+				go s.runPVPoll(pvSamples)
+				if pvTicker != nil {
+					pvTicker.Reset(config.PVPollInterval)
+				}
+				if pvResetTicker != nil {
+					pvResetTicker.Reset(config.PVIntegrationPeriod)
+				}
+				pvDataInitialDelayPassed = true
+			}
 		case <-priceCheckTicker.C:
 			if minersControlInitialDelayPassed {
 				go s.runPriceCheck(ctx)
@@ -198,12 +211,26 @@ func (s *MinerScheduler) Start(ctx context.Context) error {
 			go s.runStateCheck(ctx)
 		case <-minerDiscoveryTicker.C:
 			go s.runMinerDiscovery(ctx)
-		case <-pvTicker.C:
-			if pvDataInitialDelayPassed {
+		case <-func() <-chan time.Time {
+			if pvTicker != nil {
+				return pvTicker.C
+			}
+			// Return a channel that never sends
+			ch := make(chan time.Time)
+			return ch
+		}():
+			if pvDataInitialDelayPassed && pvTicker != nil {
 				go s.runPVPoll(pvSamples)
 			}
-		case <-pvResetTicker.C:
-			if pvDataInitialDelayPassed {
+		case <-func() <-chan time.Time {
+			if pvResetTicker != nil {
+				return pvResetTicker.C
+			}
+			// Return a channel that never sends
+			ch := make(chan time.Time)
+			return ch
+		}():
+			if pvDataInitialDelayPassed && pvResetTicker != nil {
 				go s.runPVIntegration(pvSamples, config.PVPollInterval, pvDB, config.DeviceID, config.DryRun)
 			}
 		}
@@ -224,7 +251,14 @@ func (s *MinerScheduler) stop() {
 	}
 
 	s.isRunning = false
-	close(s.stopChan)
+
+	// Close stopChan if it's not already closed
+	select {
+	case <-s.stopChan:
+		// Already closed
+	default:
+		close(s.stopChan)
+	}
 
 	// Stop health server if running
 	if s.healthServer != nil {

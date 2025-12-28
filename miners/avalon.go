@@ -286,7 +286,7 @@ func (s *StatsItem) UnmarshalJSON(data []byte) error {
 			}
 		case "WORKMODE":
 			if i, err := strconv.Atoi(value); err == nil {
-				stats.WorkMode = i
+				stats.WorkMode = AvalonWorkMode(i)
 			}
 		case "WORKLEVEL":
 			if i, err := strconv.Atoi(value); err == nil {

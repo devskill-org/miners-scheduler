@@ -40,6 +40,14 @@ type Config struct {
 	FanRHighThreshold int `json:"fanr_high_threshold"` // FanR threshold to decrease work mode
 	FanRLowThreshold  int `json:"fanr_low_threshold"`  // FanR threshold to increase work mode
 
+	// Power consumption settings (in kilowatts)
+	MinersPowerLimit   float64 `json:"miners_power_limit"`   // Maximum total power limit for miners in kW
+	MinerPowerStandby  float64 `json:"miner_power_standby"`  // Power consumption in standby mode (kW)
+	MinerPowerEco      float64 `json:"miner_power_eco"`      // Power consumption in eco mode (kW)
+	MinerPowerStandard float64 `json:"miner_power_standard"` // Power consumption in standard mode (kW)
+	MinerPowerSuper    float64 `json:"miner_power_super"`    // Power consumption in super mode (kW)
+	UsePVPowerControl  bool    `json:"use_pv_power_control"` // Enable PV power-based control
+
 	// Plant Modbus server
 	PlantModbusAddress string `json:"plant_modbus_address"` // Plant Modbus server address (format: IP:PORT, e.g., "192.168.1.100:502")
 
@@ -97,19 +105,25 @@ func DefaultConfig() *Config {
 		Longitude:                24.1052, // Riga, Latvia
 		WeatherUpdateInterval:    1 * time.Hour,
 		UserAgent:                "MyApp/1.0 (username@example.com)",
-		BatteryCapacity:          24.0, // 24 kWh
-		BatteryMaxCharge:         12.0, // 12 kW
-		BatteryMaxDischarge:      12.0, // 12 kW
-		BatteryMinSOC:            0.0,  // 0%
-		BatteryMaxSOC:            1.0,  // 100%
-		BatteryEfficiency:        0.92, // 92% round-trip
-		BatteryDegradationCost:   0.05, // $0.05 per kWh cycled
-		MaxGridImport:            30.0, // 30 kW
-		MaxGridExport:            30.0, // 30 kW
-		MaxSolarPower:            30.0, // 30 kW peak solar power
-		ImportPriceOperatorFee:   8.5,  // 8.5 EUR/MWh from Operator
-		ImportPriceDeliveryFee:   40.0, // 40 EUR/MWh for delivery
-		ExportPriceOperatorFee:   17.0, // 17 EUR/MWh from Operator
+		BatteryCapacity:          24.0,  // 24 kWh
+		BatteryMaxCharge:         12.0,  // 12 kW
+		BatteryMaxDischarge:      12.0,  // 12 kW
+		BatteryMinSOC:            0.0,   // 0%
+		BatteryMaxSOC:            1.0,   // 100%
+		BatteryEfficiency:        0.92,  // 92% round-trip
+		BatteryDegradationCost:   0.05,  // $0.05 per kWh cycled
+		MaxGridImport:            30.0,  // 30 kW
+		MaxGridExport:            30.0,  // 30 kW
+		MaxSolarPower:            30.0,  // 30 kW peak solar power
+		ImportPriceOperatorFee:   8.5,   // 8.5 EUR/MWh from Operator
+		ImportPriceDeliveryFee:   40.0,  // 40 EUR/MWh for delivery
+		ExportPriceOperatorFee:   17.0,  // 17 EUR/MWh from Operator
+		MinersPowerLimit:         30.0,  // 30 kW total power limit for miners
+		MinerPowerStandby:        0.05,  // 0.05 kW (50 W) in standby
+		MinerPowerEco:            0.8,   // 0.8 kW (800 W) in eco mode
+		MinerPowerStandard:       1.6,   // 1.6 kW (1600 W) in standard mode
+		MinerPowerSuper:          1.8,   // 1.8 kW (1800 W) in super mode
+		UsePVPowerControl:        false, // Disabled by default
 	}
 }
 
@@ -296,6 +310,27 @@ func (c *Config) Validate() error {
 
 	if c.ExportPriceOperatorFee < 0 {
 		return fmt.Errorf("export_price_operator_fee must be non-negative, got: %f", c.ExportPriceOperatorFee)
+	}
+
+	// Validate power settings
+	if c.MinersPowerLimit < 0 {
+		return fmt.Errorf("miners_power_limit must be non-negative, got: %f", c.MinersPowerLimit)
+	}
+
+	if c.MinerPowerStandby < 0 {
+		return fmt.Errorf("miner_power_standby must be non-negative, got: %f", c.MinerPowerStandby)
+	}
+
+	if c.MinerPowerEco < 0 {
+		return fmt.Errorf("miner_power_eco must be non-negative, got: %f", c.MinerPowerEco)
+	}
+
+	if c.MinerPowerStandard < 0 {
+		return fmt.Errorf("miner_power_standard must be non-negative, got: %f", c.MinerPowerStandard)
+	}
+
+	if c.MinerPowerSuper < 0 {
+		return fmt.Errorf("miner_power_super must be non-negative, got: %f", c.MinerPowerSuper)
 	}
 
 	return nil

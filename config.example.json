@@ -32,5 +32,15 @@
   "max_solar_power": 30.0,
   "import_price_operator_fee": 8.5,
   "import_price_delivery_fee": 40.0,
-  "export_price_operator_fee": 17.0
+  "export_price_operator_fee": 17.0,
+  "miners_power_limit": 30.0,
+  "miner_power_standby": 0.05,
+  "miner_power_eco": 0.8,
+  "miner_power_standard": 1.6,
+  "miner_power_super": 1.8,
+  "use_pv_power_control": false,
+  "latitude": 56.9496,
+  "longitude": 24.1052,
+  "weather_update_interval": "1h",
+  "user_agent": "MyApp/1.0 (username@example.com)"
 }

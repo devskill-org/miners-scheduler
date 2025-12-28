@@ -126,8 +126,8 @@ func (s *MinerScheduler) buildMPCForecast(ctx context.Context, config *Config) (
 	for hour, prices := range priceForecasts {
 		solar := solarForecasts[hour]
 
-		// Estimate load forecast (miners only, based on price)
-		loadForecast := s.estimateLoadForecast(prices.Import, config.PriceLimit/1000)
+		// Estimate load forecast (miners only, based on price and solar availability)
+		loadForecast := s.estimateLoadForecast(prices.Import, config.PriceLimit/1000, solar, config)
 
 		timeSlots = append(timeSlots, mpc.TimeSlot{
 			Hour:          hour,
@@ -308,29 +308,51 @@ func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONFo
 	return solarPower
 }
 
-// estimateLoadForecast estimates power load based on price
-// Miners are only ON when the hourly average price is lower than the configured priceLimit
-func (s *MinerScheduler) estimateLoadForecast(hourlyPrice float64, priceLimit float64) float64 {
-	// Get discovered miners
-	miners := s.GetDiscoveredMiners()
-
-	// Estimate miner power consumption
-	// Typical Avalon miner: ~1.3 kW at full power
-	minerPower := 0.0
-	for range miners {
-		minerPower += 1.3 // kW per miner
-	}
-
+// estimateLoadForecast estimates power load based on price and available power
+// Follows the same logic as manageMiners: miners wake up in Eco mode when price <= limit,
+// but only if there's enough power budget (when PV power control is enabled)
+func (s *MinerScheduler) estimateLoadForecast(hourlyPrice float64, priceLimit float64, solarForecast float64, config *Config) float64 {
 	// Convert hourlyPrice from EUR/MWh to EUR/kWh for comparison with priceLimit
 	hourlyPricePerKWh := hourlyPrice / 1000.0
 
 	// Miners are only ON if price is below or equal the limit
-	if hourlyPricePerKWh <= priceLimit {
-		return minerPower
+	if hourlyPricePerKWh > priceLimit {
+		return 0.0
 	}
 
-	// No load when price is at or above limit
-	return 0.0
+	// Get discovered miners
+	minersList := s.GetDiscoveredMiners()
+	if len(minersList) == 0 {
+		return 0.0
+	}
+
+	// Check if PV power control is enabled
+	usePowerControl := config.UsePVPowerControl
+	if !usePowerControl {
+		// Without power control, all miners can run in Eco mode
+		totalMinerPower := float64(len(minersList)) * config.MinerPowerEco
+		return totalMinerPower
+	}
+
+	// With power control enabled, calculate effective power limit
+	// Use minimum of available solar power and configured miners power limit
+	effectiveLimit := config.MinersPowerLimit
+	if solarForecast < effectiveLimit {
+		effectiveLimit = solarForecast
+	}
+
+	// Calculate how many miners can run within the effective limit
+	// Miners wake up in Eco mode (as per manageMiners logic)
+	minerPowerEco := config.MinerPowerEco
+	if minerPowerEco <= 0 {
+		minerPowerEco = 1.0 // Default fallback
+	}
+
+	maxMinersCanRun := int(effectiveLimit / minerPowerEco)
+	actualMinersRunning := min(maxMinersCanRun, len(minersList))
+
+	totalMinerPower := float64(actualMinersRunning) * minerPowerEco
+	return totalMinerPower
 }
 
 // logMPCResults logs the optimization results
