@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/devskill-org/miners-scheduler/meteo"
+	"github.com/devskill-org/energy-management-system/meteo"
 )
 
 func main() {

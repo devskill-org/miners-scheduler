@@ -1,6 +1,6 @@
-# Contributing to Miners Scheduler
+# Contributing to Energy Management System
 
-Thank you for your interest in contributing to Miners Scheduler! This document provides guidelines and instructions for contributing to the project.
+Thank you for your interest in contributing to the Energy Management System! This document provides guidelines and instructions for contributing to the project.
 
 ## Table of Contents
 
@@ -18,12 +18,12 @@ Thank you for your interest in contributing to Miners Scheduler! This document p
 1. Fork the repository
 2. Clone your fork:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/miners-scheduler.git
-   cd miners-scheduler
+   git clone https://github.com/YOUR_USERNAME/energy-management-system.git
+   cd energy-management-system
    ```
 3. Add the upstream repository:
    ```bash
-   git remote add upstream https://github.com/devskill-org/miners-scheduler.git
+   git remote add upstream https://github.com/devskill-org/energy-management-system.git
    ```
 
 ## Development Setup
@@ -276,15 +276,16 @@ make test-coverage
 ### Code Organization
 
 ```
-miners-scheduler/
-├── entsoe/          # ENTSO-E API client
-├── meteo/           # Weather/meteorological data
-├── miners/          # Miner control logic
-├── mpc/             # Model Predictive Control
-├── scheduler/       # Main scheduler logic
-├── sigenergy/       # Energy signature analysis
-├── sun/             # Solar calculations
+energy-management-system/
+├── entsoe/          # ENTSO-E API client for electricity pricing
+├── meteo/           # Weather/meteorological data integration
+├── miners/          # Controllable load management (miners, etc.)
+├── mpc/             # Model Predictive Control for optimization
+├── scheduler/       # Main scheduling and control logic
+├── sigenergy/       # SigEnergy PV/battery system integration
+├── sun/             # Solar position calculations
 ├── utils/           # Utility functions
+├── web/             # Web dashboard and API
 └── test_data/       # Test fixtures
 ```
 
@@ -298,7 +299,7 @@ miners-scheduler/
 
 Example:
 ```go
-func TestScheduler_Run_WithHighPrice_StopsMiners(t *testing.T) {
+func TestScheduler_Run_WithHighPrice_ReducesLoads(t *testing.T) {
     // Arrange
     scheduler := NewScheduler(...)
     
@@ -336,7 +337,7 @@ Types:
 
 Example:
 ```
-feat(scheduler): add thermal protection for miners
+feat(scheduler): add thermal protection for controllable loads
 
 Implements automatic mode switching when fan speeds exceed 70%
 to prevent overheating. Recovers to standard mode when temps normalize.

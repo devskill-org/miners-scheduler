@@ -96,11 +96,11 @@ jobs:
 
       - name: Build
         run: |
-          CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o bin/miners-scheduler .
+          CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o bin/ems .
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: miners-scheduler-linux-amd64
-          path: bin/miners-scheduler
+          name: ems-linux-amd64
+          path: bin/ems
           retention-days: 7

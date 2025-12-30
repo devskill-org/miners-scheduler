@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/devskill-org/miners-scheduler/miners"
+	"github.com/devskill-org/energy-management-system/miners"
 )
 
 // discoverMiners discovers Avalon miners on the network and stores them
@@ -95,7 +95,11 @@ func (s *MinerScheduler) refreshMinersState(ctx context.Context) []*miners.Avalo
 }
 
 func (s *MinerScheduler) getEffecivePowerLimit() float64 {
-	availablePower := s.GetCurrentPVPower() // in kW
+	info := s.GetPlantRunningInfo()
+	availablePower := 0.0
+	if info != nil {
+		availablePower = info.PhotovoltaicPower // in kW
+	}
 	powerLimit := s.config.MinersPowerLimit // in kW
 	s.logger.Printf("PV Power Control: Available PV power: %.2f kW, Miners power limit: %.2f kW", availablePower, powerLimit)
 

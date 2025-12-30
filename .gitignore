@@ -1,5 +1,5 @@
 test-binary
-miners-scheduler
+ems
 config.json
-miners-scheduler.tar
-miners-scheduler-working.tar
+ems.tar
+ems-working.tar

@@ -1,9 +1,9 @@
 .PHONY: build test clean lint fmt vet run dev docker docker-push help deps check
 
 # Build variables
-BINARY_NAME=miners-scheduler
+BINARY_NAME=ems
 BUILD_DIR=./bin
-DOCKER_IMAGE=miners-scheduler
+DOCKER_IMAGE=energy-management-system
 DOCKER_TAG=latest
 PLATFORMS=linux/amd64,linux/arm64,linux/arm/v7
 
@@ -76,11 +76,11 @@ dev-watch: ## Run with file watching (requires entr: brew install entr)
 
 # Docker targets
 docker: ## Build Docker image for ARM7 (Raspberry Pi)
-	rm -f miners-scheduler-working.tar
+	rm -f ems-working.tar
 	docker buildx build --platform linux/arm/v7 --no-cache --output=type=docker -t $(DOCKER_IMAGE):$(DOCKER_TAG)-arm7 .
-	docker save miners-scheduler:latest-arm7 > miners-scheduler.tar
-	skopeo copy docker-archive:miners-scheduler.tar docker-archive:miners-scheduler-working.tar
-	cp miners-scheduler-working.tar ~/Downloads/miners-scheduler-working.tar
+	docker save $(DOCKER_IMAGE):latest-arm7 > ems.tar
+	skopeo copy docker-archive:ems.tar docker-archive:ems-working.tar
+	cp ems-working.tar ~/Downloads/ems-working.tar
 
 docker-multi: ## Build Docker image for multiple platforms
 	docker buildx build --platform $(PLATFORMS) -t $(DOCKER_IMAGE):$(DOCKER_TAG) .

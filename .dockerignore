@@ -1,0 +1,58 @@
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+*.md
+CONTRIBUTING.md
+LICENSE
+
+# Development files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Web development
+web/node_modules
+web/dist
+web/.vite
+web/.cache
+
+# Logs
+*.log
+logs/
+
+# Test data
+test_data/
+
+# Configuration (keep config.json as it's needed)
+config.example.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Build artifacts
+build/
+dist/
+
+# Dependencies that will be downloaded during build
+go.sum.backup

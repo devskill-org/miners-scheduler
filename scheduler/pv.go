@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/devskill-org/miners-scheduler/meteo"
-	"github.com/devskill-org/miners-scheduler/sigenergy"
+	"github.com/devskill-org/energy-management-system/meteo"
+	"github.com/devskill-org/energy-management-system/sigenergy"
 )
 
 type WeatherForecastCache struct {
@@ -177,26 +177,25 @@ func (s *MinerScheduler) fetchCloudCoverage() (*float64, error) {
 	return current.GetCloudCoverage(), nil
 }
 
-// GetCurrentPVPower returns the current PV power in kW
-// If PlantModbusAddress is not configured, returns 0
-func (s *MinerScheduler) GetCurrentPVPower() float64 {
+// GetPlantRunningInfo returns the current plant running information
+// If PlantModbusAddress is not configured, returns nil
+func (s *MinerScheduler) GetPlantRunningInfo() *sigenergy.PlantRunningInfo {
 	if s.config.PlantModbusAddress == "" {
-		return 0
+		return nil
 	}
 
 	client, err := sigenergy.NewTCPClient(s.config.PlantModbusAddress, sigenergy.PlantAddress)
 	if err != nil {
-		s.logger.Printf("Failed to create modbus client for PV power: %v", err)
-		return 0
+		s.logger.Printf("Failed to create modbus client for plant info: %v", err)
+		return nil
 	}
 	defer client.Close()
 
 	info, err := client.ReadPlantRunningInfo()
 	if err != nil {
-		s.logger.Printf("Failed to read PV power: %v", err)
-		return 0
+		s.logger.Printf("Failed to read plant running info: %v", err)
+		return nil
 	}
 
-	// Return power in kW
-	return info.PhotovoltaicPower
+	return info
 }

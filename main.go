@@ -9,8 +9,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/devskill-org/miners-scheduler/scheduler"
-	"github.com/devskill-org/miners-scheduler/sigenergy"
+	"github.com/devskill-org/energy-management-system/scheduler"
+	"github.com/devskill-org/energy-management-system/sigenergy"
 )
 
 func main() {
@@ -19,6 +19,7 @@ func main() {
 		configFile = flag.String("config", "config.json", "Configuration file path")
 		info       = flag.Bool("info", false, "Show Plant Information")
 		help       = flag.Bool("help", false, "Show help message")
+		serverOnly = flag.Bool("serverOnly", false, "Run only web server without periodic checks")
 	)
 	flag.Parse()
 
@@ -40,7 +41,7 @@ func main() {
 		}
 		return
 	}
-	fmt.Printf("Starting miners-scheduler with the following configuration:\n")
+	fmt.Printf("Starting Energy Management System with the following configuration:\n")
 	fmt.Printf("  Price Limit: %.2f EUR/MWh\n", config.PriceLimit)
 	fmt.Printf("  Network: %s\n", config.Network)
 	fmt.Printf("  Check Price Interval: %s\n", config.CheckPriceInterval)
@@ -68,7 +69,7 @@ func main() {
 
 	// Start scheduler in a goroutine
 	go func() {
-		if err := minerScheduler.Start(ctx); err != nil {
+		if err := minerScheduler.Start(ctx, *serverOnly); err != nil {
 			if err != context.Canceled {
 				logger.Printf("Scheduler error: %v", err)
 			}
@@ -91,30 +92,40 @@ func main() {
 }
 
 func showHelp() {
-	fmt.Println("Miners Scheduler - Manages Avalon miners based on electricity prices")
+	fmt.Println("Energy Management System (EMS) - Optimize energy consumption, production, and storage")
 	fmt.Println()
 	fmt.Println("DESCRIPTION:")
-	fmt.Println("  This application periodically (every 15 minutes) performs the following tasks:")
-	fmt.Println("  1. Discovers Avalon miners on the specified network")
-	fmt.Println("  2. Gets current electricity price from ENTSO-E API")
-	fmt.Println("  3. Compares price with the configured limit")
-	fmt.Println("  4. Manages miner states:")
-	fmt.Println("     - If price ≤ limit: Wake up miners")
-	fmt.Println("     - If price > limit: Put active miners into standby")
+	fmt.Println("  A comprehensive energy management system that integrates solar (PV), battery storage,")
+	fmt.Println("  grid connection, and controllable loads. The system uses real-time electricity prices,")
+	fmt.Println("  weather forecasts, and Model Predictive Control (MPC) to minimize energy costs.")
+	fmt.Println()
+	fmt.Println("  Key Features:")
+	fmt.Println("  - Solar power monitoring via Modbus")
+	fmt.Println("  - Battery charge/discharge optimization")
+	fmt.Println("  - Price-based load management")
+	fmt.Println("  - Weather-integrated solar forecasting")
+	fmt.Println("  - Real-time web dashboard")
+	fmt.Println("  - Thermal protection for devices")
 	fmt.Println()
 	fmt.Println("USAGE:")
-	fmt.Println("  miners-scheduler [OPTIONS]")
+	fmt.Println("  ems [OPTIONS]")
 	fmt.Println()
 	fmt.Println("OPTIONS:")
 	flag.PrintDefaults()
 	fmt.Println()
 	fmt.Println("EXAMPLES:")
 	fmt.Println("  # Basic usage with default settings")
-	fmt.Println("  miners-scheduler")
+	fmt.Println("  ems")
 	fmt.Println()
-	fmt.Println("  # Custom settings")
-	fmt.Println("  miners-scheduler --config=config.json")
+	fmt.Println("  # Custom configuration")
+	fmt.Println("  ems --config=config.json")
+	fmt.Println()
+	fmt.Println("  # Show plant/system information")
+	fmt.Println("  ems -info")
+	fmt.Println()
+	fmt.Println("  # Run only web server without periodic checks")
+	fmt.Println("  ems -serverOnly")
 	fmt.Println()
 	fmt.Println("  # Show this help")
-	fmt.Println("  miners-scheduler -help")
+	fmt.Println("  ems -help")
 }

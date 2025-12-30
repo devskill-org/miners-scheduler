@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devskill-org/miners-scheduler/entsoe"
-	"github.com/devskill-org/miners-scheduler/miners"
+	"github.com/devskill-org/energy-management-system/entsoe"
+	"github.com/devskill-org/energy-management-system/miners"
 )
 
 // mockEnergyPricesServer creates a mock HTTP server that returns valid energy prices XML
@@ -195,7 +195,7 @@ func TestSchedulerRunningState(t *testing.T) {
 	// Start scheduler in goroutine
 	done := make(chan error, 1)
 	go func() {
-		done <- scheduler.Start(ctx)
+		done <- scheduler.Start(ctx, false)
 	}()
 
 	// Give it a moment to start
@@ -234,14 +234,14 @@ func TestSchedulerDoubleStart(t *testing.T) {
 	// Start first instance
 	done1 := make(chan error, 1)
 	go func() {
-		done1 <- scheduler.Start(ctx)
+		done1 <- scheduler.Start(ctx, false)
 	}()
 
 	// Give it a moment to start
 	time.Sleep(100 * time.Millisecond)
 
 	// Try to start second instance
-	err := scheduler.Start(ctx)
+	err := scheduler.Start(ctx, false)
 	if err == nil {
 		t.Error("Expected error when starting scheduler twice")
 	}
@@ -261,7 +261,7 @@ func TestSchedulerStop(t *testing.T) {
 	// Start scheduler
 	done := make(chan error, 1)
 	go func() {
-		done <- scheduler.Start(ctx)
+		done <- scheduler.Start(ctx, false)
 	}()
 
 	// Give it a moment to start

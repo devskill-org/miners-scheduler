@@ -5,7 +5,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/devskill-org/miners-scheduler/mpc"
+	"github.com/devskill-org/energy-management-system/mpc"
 )
 
 // Example usage

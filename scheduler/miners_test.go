@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/devskill-org/miners-scheduler/miners"
+	"github.com/devskill-org/energy-management-system/miners"
 )
 
 // This file contains unit tests for the controlMiner function in miners.go.

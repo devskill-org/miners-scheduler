@@ -42,6 +42,20 @@ func (s AvalonState) IsValid() bool {
 	}
 }
 
+// String returns the string representation of the AvalonWorkMode
+func (w AvalonWorkMode) String() string {
+	switch w {
+	case AvalonEcoMode:
+		return "Eco"
+	case AvalonStandardMode:
+		return "Standard"
+	case AvalonSuperMode:
+		return "Super"
+	default:
+		return "Unknown"
+	}
+}
+
 type AvalonQCommand struct {
 	Command string `json:"command"`
 }

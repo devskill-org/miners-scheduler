@@ -5,8 +5,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devskill-org/miners-scheduler/entsoe"
+	"github.com/devskill-org/energy-management-system/entsoe"
 )
+
+// GetPricesMarketData returns the cached PublicationMarketData without downloading
+func (s *MinerScheduler) GetPricesMarketData() *entsoe.PublicationMarketData {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.pricesMarketData
+}
 
 // GetMarketData returns the latest PublicationMarketData, downloading new data if needed
 func (s *MinerScheduler) GetMarketData(ctx context.Context) (*entsoe.PublicationMarketData, error) {
@@ -34,6 +41,9 @@ func (s *MinerScheduler) GetMarketData(ctx context.Context) (*entsoe.Publication
 		return nil, err
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	newDoc, err := entsoe.DownloadPublicationMarketData(ctx, s.config.SecurityToken, s.config.UrlFormat, location)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download PublicationMarketData: %w", err)
@@ -48,10 +58,8 @@ func (s *MinerScheduler) GetMarketData(ctx context.Context) (*entsoe.Publication
 	}
 
 	// Store as latest with expiry time
-	s.mu.Lock()
 	s.pricesMarketData = newDoc
 	s.pricesMarketDataExpiry = nextExpiry
-	s.mu.Unlock()
 
 	s.logger.Printf("Successfully downloaded new PublicationMarketData, cache expires at %s", nextExpiry.Format(time.RFC3339))
 	return newDoc, nil

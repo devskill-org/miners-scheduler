@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/devskill-org/miners-scheduler/utils"
+	"github.com/devskill-org/energy-management-system/utils"
 )
 
 // APIClient represents an HTTP client for the ENTSO-E API
@@ -47,6 +47,7 @@ func DownloadPublicationMarketData(ctx context.Context, securityToken string, ur
 
 	now := time.Now().In(location)
 	url := buildPublicationMarketDataURL(securityToken, urlFormat, now)
+	fmt.Println(url)
 
 	client := NewAPIClient()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
