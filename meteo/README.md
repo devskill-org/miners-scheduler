@@ -15,7 +15,7 @@ A Go client library for the [MET Norway Location Forecast API](https://api.met.n
 ## Installation
 
 ```bash
-go get github.com/devskill-org/energy-management-system/meteo
+go get github.com/devskill-org/ems/meteo
 ```
 
 ## Quick Start
@@ -27,7 +27,7 @@ import (
     "fmt"
     "log"
     
-    "github.com/devskill-org/energy-management-system/meteo"
+    "github.com/devskill-org/ems/meteo"
 )
 
 func main() {

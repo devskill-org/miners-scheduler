@@ -30,7 +30,7 @@ For **private repositories**:
 If your repository is private:
 
 1. **Get Your Codecov Token**
-   - Navigate to https://codecov.io/gh/devskill-org/energy-management-system
+   - Navigate to https://codecov.io/gh/devskill-org/ems
    - Click on "Settings" in the left sidebar
    - Copy the "Repository Upload Token"
 
@@ -46,7 +46,7 @@ If your repository is private:
 
 1. **Commit and push** your changes (if you haven't already)
 2. **Wait for workflow** to complete (check the Actions tab)
-3. **Visit Codecov** dashboard at https://codecov.io/gh/devskill-org/energy-management-system
+3. **Visit Codecov** dashboard at https://codecov.io/gh/devskill-org/ems
 4. **Check your README** - the badge should now display the coverage percentage
 
 ## Badge Configuration
@@ -54,13 +54,13 @@ If your repository is private:
 The coverage badge is already configured in your README.md:
 
 ```markdown
-[![Coverage](https://codecov.io/gh/devskill-org/energy-management-system/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/energy-management-system)
+[![Coverage](https://codecov.io/gh/devskill-org/ems/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/ems)
 ```
 
 If you use a different default branch (e.g., `master`), update the badge URL:
 
 ```markdown
-[![Coverage](https://codecov.io/gh/devskill-org/energy-management-system/branch/master/graph/badge.svg)](https://codecov.io/gh/devskill-org/energy-management-system)
+[![Coverage](https://codecov.io/gh/devskill-org/ems/branch/master/graph/badge.svg)](https://codecov.io/gh/devskill-org/ems)
 ```
 
 ## Codecov Features
@@ -95,17 +95,17 @@ You can customize your badge appearance:
 
 ### Default Badge
 ```markdown
-[![Coverage](https://codecov.io/gh/devskill-org/energy-management-system/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/energy-management-system)
+[![Coverage](https://codecov.io/gh/devskill-org/ems/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/ems)
 ```
 
 ### Flat Style Badge
 ```markdown
-[![Coverage](https://codecov.io/gh/devskill-org/energy-management-system/branch/main/graph/badge.svg?style=flat)](https://codecov.io/gh/devskill-org/energy-management-system)
+[![Coverage](https://codecov.io/gh/devskill-org/ems/branch/main/graph/badge.svg?style=flat)](https://codecov.io/gh/devskill-org/ems)
 ```
 
 ### Flat-Square Style Badge
 ```markdown
-[![Coverage](https://codecov.io/gh/devskill-org/energy-management-system/branch/main/graph/badge.svg?style=flat-square)](https://codecov.io/gh/devskill-org/energy-management-system)
+[![Coverage](https://codecov.io/gh/devskill-org/ems/branch/main/graph/badge.svg?style=flat-square)](https://codecov.io/gh/devskill-org/ems)
 ```
 
 ## Troubleshooting

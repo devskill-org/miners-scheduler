@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devskill-org/energy-management-system/entsoe"
-	"github.com/devskill-org/energy-management-system/miners"
+	"github.com/devskill-org/ems/entsoe"
+	"github.com/devskill-org/ems/miners"
 )
 
 // mockEnergyPricesServer creates a mock HTTP server that returns valid energy prices XML

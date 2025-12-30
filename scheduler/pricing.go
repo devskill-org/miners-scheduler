@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devskill-org/energy-management-system/entsoe"
+	"github.com/devskill-org/ems/entsoe"
 )
 
 // GetPricesMarketData returns the cached PublicationMarketData without downloading
