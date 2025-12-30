@@ -8,6 +8,8 @@
 
 A comprehensive Go-based Energy Management System that optimizes energy consumption, production, and storage across multiple sources including solar (PV), battery storage, grid connection, and controllable loads. The system uses real-time electricity price data, weather forecasts, and Model Predictive Control (MPC) to minimize energy costs while maintaining system reliability.
 
+![Web UI Screenshot](screen.png)
+
 ## Overview
 
 The Energy Management System provides intelligent control and optimization for residential or small commercial energy systems. It integrates:
