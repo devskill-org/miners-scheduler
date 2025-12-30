@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import "./App.css";
+import emsIcon from "../assets/icon-32.png";
 
 interface SchedulerStatus {
   is_running: boolean;
@@ -18,6 +19,14 @@ interface HealthResponse {
     uptime: string;
     goroutines: number;
   };
+  ems: {
+    current_pv_power: number;
+    ess_power: number;
+    ess_soc: number;
+    grid_sensor_status: number;
+    grid_sensor_active_power: number;
+    plant_active_power: number;
+  };
 }
 
 interface StatusResponse {
@@ -30,7 +39,6 @@ interface StatusResponse {
     count: number;
     list: Array<{
       ip: string;
-      name: string;
       status: string;
     }>;
   };
@@ -40,6 +48,7 @@ interface StatusResponse {
     current?: number;
     limit?: number;
   };
+
   timestamp: string;
 }
 
@@ -186,7 +195,18 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>⛏️ Miners Scheduler</h1>
+        <h1>
+          <img
+            src={emsIcon}
+            alt="EMS"
+            style={{
+              height: "32px",
+              marginRight: "12px",
+              verticalAlign: "middle",
+            }}
+          />
+          Energy Management System
+        </h1>
         <div className="status-badges">
           <div
             className={`status-badge ${isHealthy ? "healthy" : "unhealthy"}`}
@@ -262,7 +282,6 @@ function App() {
             <div className="miners-list">
               {status.miners.list.map((miner, index) => (
                 <div key={index} className="miner-item">
-                  <div className="miner-name">{miner.name || miner.ip}</div>
                   <div className="miner-ip">{miner.ip}</div>
                   <div
                     className={`miner-status status-${miner.status?.toLowerCase()}`}
@@ -274,6 +293,95 @@ function App() {
             </div>
           </section>
         )}
+
+        <section className="card devices-section">
+          <h2>Devices</h2>
+          <div className="devices-content" style={{ position: "relative" }}>
+            <div
+              className="pv-power-display"
+              style={{ position: "absolute", top: "202px", right: "170px" }}
+            >
+              <div className="pv-power-value">
+                {health?.ems?.current_pv_power !== undefined
+                  ? `${health.ems.current_pv_power.toFixed(2)} kW`
+                  : "N/A"}
+              </div>
+            </div>
+            <div
+              className="pv-power-display"
+              style={{ position: "absolute", top: "643px", right: "622px" }}
+            >
+              <div
+                className="pv-power-value"
+                style={{
+                  color:
+                    health?.ems?.ess_power !== undefined
+                      ? health.ems.ess_power > 0
+                        ? "#ea580c"
+                        : health.ems.ess_power < 0
+                          ? "#16a34a"
+                          : "#f1f5f9"
+                      : "#f1f5f9",
+                }}
+              >
+                {health?.ems?.ess_power !== undefined
+                  ? `${health.ems.ess_power.toFixed(2)} kW`
+                  : "N/A"}
+              </div>
+              <div className="pv-power-label" style={{ marginTop: "8px" }}>
+                {health?.ems?.ess_soc !== undefined
+                  ? `${health.ems.ess_soc.toFixed(1)}%`
+                  : "N/A"}
+              </div>
+            </div>
+            <div
+              className="pv-power-display"
+              style={{ position: "absolute", top: "556px", left: "220px" }}
+            >
+              <div
+                className="pv-power-value"
+                style={{
+                  color:
+                    health?.ems?.grid_sensor_active_power !== undefined
+                      ? health.ems.grid_sensor_active_power > 0
+                        ? "#ea580c"
+                        : health.ems.grid_sensor_active_power < 0
+                          ? "#16a34a"
+                          : "#f1f5f9"
+                      : "#f1f5f9",
+                }}
+              >
+                {health?.ems?.grid_sensor_active_power !== undefined &&
+                health?.ems?.grid_sensor_status === 1
+                  ? `${health.ems.grid_sensor_active_power.toFixed(2)} kW`
+                  : "N/A"}
+              </div>
+            </div>
+            <div
+              className="pv-power-display"
+              style={{ position: "absolute", top: "194px", left: "223px" }}
+            >
+              <div className="pv-power-label">Active Power</div>
+              <div
+                className="pv-power-value"
+                style={{
+                  color:
+                    health?.ems?.plant_active_power !== undefined
+                      ? health.ems.plant_active_power < 0
+                        ? "#ea580c"
+                        : health.ems.plant_active_power > 0
+                          ? "#16a34a"
+                          : "#f1f5f9"
+                      : "#f1f5f9",
+                }}
+              >
+                {health?.ems?.plant_active_power !== undefined
+                  ? `${health.ems.plant_active_power.toFixed(2)} kW`
+                  : "N/A"}
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section className="card system-info">
           <h2>System Information</h2>
@@ -299,7 +407,10 @@ function App() {
       </main>
 
       <footer className="footer">
-        <p>Avalon miners scheduler based on electricity prices</p>
+        <p>
+          Avalon miners scheduler based on electricity prices and plant
+          available power
+        </p>
       </footer>
     </div>
   );

@@ -225,6 +225,60 @@ body {
     color: var(--color-text-secondary);
 }
 
+.devices-section {
+    position: relative;
+    min-height: 820px;
+    overflow: hidden;
+}
+
+.devices-section::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url("../assets/ems.png");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    z-index: 0;
+}
+
+.devices-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 250px;
+}
+
+.pv-power-display {
+    text-align: center;
+    background-color: rgba(30, 41, 59, 0.9);
+    padding: 0.1875rem 0.3125rem;
+    border-radius: var(--border-radius);
+    border: 2px solid var(--color-primary);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+}
+
+.pv-power-label {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.pv-power-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-success);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
 .system-info .info-grid {
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
@@ -280,5 +334,21 @@ body {
 
     .miners-list {
         grid-template-columns: 1fr;
+    }
+
+    .devices-section {
+        min-height: 200px;
+    }
+
+    .devices-content {
+        min-height: 150px;
+    }
+
+    .pv-power-display {
+        padding: 1.5rem 2rem;
+    }
+
+    .pv-power-value {
+        font-size: 2rem;
     }
 }

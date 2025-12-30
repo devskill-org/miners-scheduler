@@ -392,7 +392,7 @@ Controllable devices support multiple operating modes:
 - **Standby**: Transitions device to standby state
 - **SetWorkMode**: Changes device operating mode
 - **GetLiteStats**: Retrieves current device status
-- **GetCurrentPVPower**: Reads PV production via Modbus
+- **GetPlantRunningInfo**: Retrieves complete plant running information via Modbus (PV power, battery SOC, grid power, ESS power, etc.)
 - **GetBatterySOC**: Reads battery state of charge
 - **OptimizeSchedule**: Runs MPC optimization
 

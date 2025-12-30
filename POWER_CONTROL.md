@@ -92,7 +92,7 @@ This function now:
 - **`getMinerPowerConsumption(state, workMode)`**: Returns power consumption in kW for a given device state and mode
 - **`calculateTotalPowerConsumption(minersList)`**: Calculates total power consumption of all controllable loads in kW
 - **`adjustMinersForPowerLimit(minersList, powerLimit)`**: Adjusts device modes to stay within power limit (power limit in kW)
-- **`GetCurrentPVPower()`**: Retrieves current PV power from the plant Modbus interface in kW
+- **`GetPlantRunningInfo()`**: Retrieves complete plant running information from the plant Modbus interface, including PV power, battery SOC, grid power, ESS power, etc.
 
 ## Example Configuration
 

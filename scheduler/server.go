@@ -23,13 +23,14 @@ type WebServer struct {
 	done      chan struct{}
 }
 
-// HealthResponse represents the health check response
-type HealthResponse struct {
+// StatusResponse represents the health check response
+type StatusResponse struct {
 	Status    string          `json:"status"`
 	Timestamp string          `json:"timestamp"`
 	Version   string          `json:"version,omitempty"`
 	Scheduler SchedulerHealth `json:"scheduler"`
 	System    SystemHealth    `json:"system"`
+	EMS       EMSHealth       `json:"ems"`
 }
 
 // SchedulerHealth represents scheduler-specific health information
@@ -49,6 +50,16 @@ type SystemHealth struct {
 	Uptime     string `json:"uptime"`
 	Memory     string `json:"memory,omitempty"`
 	Goroutines int    `json:"goroutines,omitempty"`
+}
+
+// EMSHealth represents energy management system health information
+type EMSHealth struct {
+	CurrentPVPower        float64 `json:"current_pv_power"`
+	ESSPower              float64 `json:"ess_power"`
+	ESSSOC                float64 `json:"ess_soc"`
+	GridSensorStatus      uint16  `json:"grid_sensor_status"`
+	GridSensorActivePower float64 `json:"grid_sensor_active_power"`
+	PlantActivePower      float64 `json:"plant_active_power"`
 }
 
 // NewWebServer creates a new web server with health endpoints and static file serving
@@ -83,7 +94,6 @@ func NewWebServer(scheduler *MinerScheduler, port int) *WebServer {
 	// Register API routes
 	mux.HandleFunc("/api/health", hs.healthHandler)
 	mux.HandleFunc("/api/ready", hs.readinessHandler)
-	mux.HandleFunc("/api/status", hs.statusHandler)
 	mux.HandleFunc("/api/ws", hs.wsHandler)
 
 	// Serve static files from web folder
@@ -127,7 +137,7 @@ func (hs *WebServer) Stop(ctx context.Context) error {
 	// Close all WebSocket connections
 	hs.clients.Range(func(key, value any) bool {
 		if conn, ok := key.(*websocket.Conn); ok {
-			conn.Close()
+			conn.Close() //nolint:gosec
 		}
 		return true
 	})
@@ -144,7 +154,7 @@ func (hs *WebServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 	status := hs.scheduler.GetStatus()
 
-	health := HealthResponse{
+	response := StatusResponse{
 		Status:    "healthy",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Version:   "1.0.0",
@@ -163,12 +173,12 @@ func (hs *WebServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Determine overall health status
 	if !status.IsRunning {
-		health.Status = "unhealthy"
+		response.Status = "unhealthy"
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(health); err != nil {
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 }
@@ -198,48 +208,6 @@ func (hs *WebServer) readinessHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// statusHandler handles the /api/status endpoint (detailed status)
-func (hs *WebServer) statusHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	status := hs.scheduler.GetStatus()
-	miners := hs.scheduler.GetDiscoveredMiners()
-	doc := hs.scheduler.GetPricesMarketData()
-
-	response := map[string]any{
-		"scheduler_status": status,
-		"miners": map[string]any{
-			"count": len(miners),
-			"list":  miners,
-		},
-		"price_data": map[string]any{
-			"has_document": doc != nil,
-		},
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
-	}
-
-	// Add document info if available
-	if doc != nil {
-		response["price_data"].(map[string]any)["document_id"] = doc.MRID
-		response["price_data"].(map[string]any)["created_at"] = doc.CreatedDateTime
-
-		// Add current price if available
-		if price, found := doc.LookupAveragePriceInHourByTime(time.Now()); found {
-			response["price_data"].(map[string]any)["current_avg_price"] = price
-			response["price_data"].(map[string]any)["current"] = price
-			response["price_data"].(map[string]any)["limit"] = hs.scheduler.GetConfig().PriceLimit
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-	}
-}
-
 // wsHandler handles WebSocket connections
 func (hs *WebServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := hs.upgrader.Upgrade(w, r, nil)
@@ -264,7 +232,7 @@ func (hs *WebServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	// Handle client disconnection
 	defer func() {
 		hs.clients.Delete(conn)
-		conn.Close()
+		conn.Close() //nolint:gosec
 
 		clientCount := 0
 		hs.clients.Range(func(key, value any) bool {
@@ -300,7 +268,7 @@ func (hs *WebServer) handleBroadcasts() {
 				err := conn.WriteMessage(websocket.TextMessage, message)
 				if err != nil {
 					fmt.Printf("WebSocket write error: %v\n", err)
-					conn.Close()
+					conn.Close() //nolint:gosec
 					hs.clients.Delete(conn)
 				}
 				return true
@@ -354,8 +322,38 @@ func (hs *WebServer) buildStatusData() map[string]any {
 	miners := hs.scheduler.GetDiscoveredMiners()
 	doc := hs.scheduler.GetPricesMarketData()
 
-	health := HealthResponse{
-		Status:    "healthy",
+	// Build miners list with detailed status
+	minersList := make([]map[string]any, 0, len(miners))
+	minersHealthy := true
+
+	for _, miner := range miners {
+		minerStatus := "Unknown"
+
+		if miner.LastStats != nil {
+			state := miner.LastStats.State.String()
+			workMode := miner.LastStats.WorkMode.String()
+			minerStatus = fmt.Sprintf("%s (%s)", state, workMode)
+		} else if miner.LastStatsError != nil {
+			minerStatus = "Error"
+			minersHealthy = false
+		}
+
+		minersList = append(minersList, map[string]any{
+			"ip":     miner.Address,
+			"status": minerStatus,
+		})
+	}
+
+	// Determine overall health status
+	overallStatus := "healthy"
+	if !status.IsRunning {
+		overallStatus = "unhealthy"
+	} else if len(miners) > 0 && !minersHealthy {
+		overallStatus = "degraded"
+	}
+
+	health := StatusResponse{
+		Status:    overallStatus,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Version:   "1.0.0",
 		Scheduler: SchedulerHealth{
@@ -371,8 +369,16 @@ func (hs *WebServer) buildStatusData() map[string]any {
 		},
 	}
 
-	if !status.IsRunning {
-		health.Status = "unhealthy"
+	info := hs.scheduler.GetPlantRunningInfo()
+	if info != nil {
+		health.EMS = EMSHealth{
+			CurrentPVPower:        info.PhotovoltaicPower,
+			ESSPower:              info.ESSPower,
+			ESSSOC:                info.ESSSOC,
+			GridSensorStatus:      info.GridSensorStatus,
+			GridSensorActivePower: info.GridSensorActivePower,
+			PlantActivePower:      info.PlantActivePower,
+		}
 	}
 
 	priceData := map[string]any{
@@ -397,7 +403,7 @@ func (hs *WebServer) buildStatusData() map[string]any {
 			"scheduler_status": status,
 			"miners": map[string]any{
 				"count": len(miners),
-				"list":  miners,
+				"list":  minersList,
 			},
 			"price_data": priceData,
 			"timestamp":  time.Now().UTC().Format(time.RFC3339),

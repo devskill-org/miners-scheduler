@@ -1,5 +1,25 @@
-# Multi-stage build for Go application
-FROM golang:1.25.1-alpine AS builder
+# Multi-stage build for Go application with React web UI
+
+# Stage 1: Build web application
+FROM node:18-alpine AS web-builder
+
+# Set working directory for web build
+WORKDIR /web
+
+# Copy web application files
+COPY web/package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production=false
+
+# Copy web source code
+COPY web/ ./
+
+# Build the web application
+RUN npm run build
+
+# Stage 2: Build Go application
+FROM golang:1.25.1-alpine AS go-builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
@@ -8,7 +28,7 @@ RUN apk add --no-cache git ca-certificates tzdata
 WORKDIR /app
 
 # Copy go mod files
-COPY go.mod ./
+COPY go.mod go.sum ./
 
 # Download dependencies
 RUN go mod download
@@ -16,10 +36,13 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Copy built web assets from web-builder stage
+COPY --from=web-builder /web/dist ./web/dist
+
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o ems .
 
-# Final stage
+# Stage 3: Final runtime image
 FROM alpine:latest
 
 # Install runtime dependencies
@@ -35,7 +58,10 @@ RUN addgroup -g 1001 ems && \
 WORKDIR /app
 
 # Copy binary from builder stage
-COPY --from=builder /app/ems .
+COPY --from=go-builder /app/ems .
+
+# Copy web assets from builder stage
+COPY --from=go-builder /app/web/dist ./web/dist
 
 # Copy configuration example
 COPY config.json /app/config.json
@@ -47,7 +73,7 @@ RUN mkdir -p /app/logs /app/data && \
 # Switch to non-root user
 USER ems
 
-# Expose health check port (if configured)
+# Expose application port
 EXPOSE 8080
 
 # Health check

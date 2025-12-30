@@ -47,6 +47,7 @@ func DownloadPublicationMarketData(ctx context.Context, securityToken string, ur
 
 	now := time.Now().In(location)
 	url := buildPublicationMarketDataURL(securityToken, urlFormat, now)
+	fmt.Println(url)
 
 	client := NewAPIClient()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
