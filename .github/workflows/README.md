@@ -55,13 +55,13 @@ To get coverage badges and detailed reports at [Codecov](https://codecov.io):
      - Value: Your Codecov token
 
 4. **View Coverage Reports**
-   - After the first workflow run, visit https://codecov.io/gh/devskill-org/energy-management-system
+   - After the first workflow run, visit https://codecov.io/gh/devskill-org/ems
    - View detailed coverage reports, trends, and file-by-file analysis
    - The badge in README.md will automatically update
 
 **Badge:**
 ```markdown
-[![Coverage](https://codecov.io/gh/devskill-org/energy-management-system/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/energy-management-system)
+[![Coverage](https://codecov.io/gh/devskill-org/ems/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/ems)
 ```
 
 ### Alternative: Simple Test Status Badge
@@ -69,13 +69,13 @@ To get coverage badges and detailed reports at [Codecov](https://codecov.io):
 If you don't want to use Codecov, you can use just the test status badge:
 
 ```markdown
-[![Tests](https://github.com/devskill-org/energy-management-system/actions/workflows/test.yml/badge.svg)](https://github.com/devskill-org/energy-management-system/actions/workflows/test.yml)
+[![Tests](https://github.com/devskill-org/ems/actions/workflows/test.yml/badge.svg)](https://github.com/devskill-org/ems/actions/workflows/test.yml)
 ```
 
 ## Viewing Coverage Reports
 
 ### In Codecov
-1. Visit https://codecov.io/gh/devskill-org/energy-management-system
+1. Visit https://codecov.io/gh/devskill-org/ems
 2. View coverage percentage, trends, and file-by-file breakdown
 3. See coverage changes in pull requests
 
@@ -110,9 +110,9 @@ Then open `coverage.html` in your browser.
 Add these badges to your README.md:
 
 ```markdown
-[![Tests](https://github.com/devskill-org/energy-management-system/actions/workflows/test.yml/badge.svg)](https://github.com/devskill-org/energy-management-system/actions/workflows/test.yml)
-[![Coverage](https://codecov.io/gh/devskill-org/energy-management-system/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/energy-management-system)
-[![Go Report Card](https://goreportcard.com/badge/github.com/devskill-org/energy-management-system)](https://goreportcard.com/report/github.com/devskill-org/energy-management-system)
+[![Tests](https://github.com/devskill-org/ems/actions/workflows/test.yml/badge.svg)](https://github.com/devskill-org/ems/actions/workflows/test.yml)
+[![Coverage](https://codecov.io/gh/devskill-org/ems/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/ems)
+[![Go Report Card](https://goreportcard.com/badge/github.com/devskill-org/ems)](https://goreportcard.com/report/github.com/devskill-org/ems)
 ```
 
 ## Troubleshooting

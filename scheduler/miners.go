@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/devskill-org/energy-management-system/miners"
+	"github.com/devskill-org/ems/miners"
 )
 
 // discoverMiners discovers Avalon miners on the network and stores them

@@ -9,8 +9,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/devskill-org/energy-management-system/scheduler"
-	"github.com/devskill-org/energy-management-system/sigenergy"
+	"github.com/devskill-org/ems/scheduler"
+	"github.com/devskill-org/ems/sigenergy"
 )
 
 func main() {

@@ -1,10 +1,10 @@
 # Energy Management System (EMS)
 
-[![Tests](https://github.com/devskill-org/energy-management-system/actions/workflows/test.yml/badge.svg)](https://github.com/devskill-org/energy-management-system/actions/workflows/test.yml)
-[![Coverage](https://codecov.io/gh/devskill-org/energy-management-system/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/energy-management-system)
-[![Go Report Card](https://goreportcard.com/badge/github.com/devskill-org/energy-management-system)](https://goreportcard.com/report/github.com/devskill-org/energy-management-system)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/devskill-org/energy-management-system)](https://github.com/devskill-org/energy-management-system/blob/main/go.mod)
-[![License](https://img.shields.io/github/license/devskill-org/energy-management-system)](https://github.com/devskill-org/energy-management-system/blob/main/LICENSE)
+[![Tests](https://github.com/devskill-org/ems/actions/workflows/test.yml/badge.svg)](https://github.com/devskill-org/ems/actions/workflows/test.yml)
+[![Coverage](https://codecov.io/gh/devskill-org/ems/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/ems)
+[![Go Report Card](https://goreportcard.com/badge/github.com/devskill-org/ems)](https://goreportcard.com/report/github.com/devskill-org/ems)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/devskill-org/ems)](https://github.com/devskill-org/ems/blob/main/go.mod)
+[![License](https://img.shields.io/github/license/devskill-org/ems)](https://github.com/devskill-org/ems/blob/main/LICENSE)
 
 A comprehensive Go-based Energy Management System that optimizes energy consumption, production, and storage across multiple sources including solar (PV), battery storage, grid connection, and controllable loads. The system uses real-time electricity price data, weather forecasts, and Model Predictive Control (MPC) to minimize energy costs while maintaining system reliability.
 
@@ -143,7 +143,7 @@ The Energy Management System operates on multiple time scales:
 ### From Source
 
 ```bash
-git clone https://github.com/devskill-org/energy-management-system.git
+git clone https://github.com/devskill-org/ems.git
 cd energy-management-system
 go build -o ems ./
 ```
@@ -525,8 +525,8 @@ This project is licensed under the terms specified in the [LICENSE](LICENSE) fil
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/devskill-org/energy-management-system/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/devskill-org/energy-management-system/discussions)
+- **Issues**: [GitHub Issues](https://github.com/devskill-org/ems/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/devskill-org/ems/discussions)
 - **Documentation**: Check the `/docs` folder for detailed guides
 
 ## Roadmap

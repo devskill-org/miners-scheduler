@@ -1,4 +1,4 @@
-module github.com/devskill-org/energy-management-system
+module github.com/devskill-org/ems
 
 go 1.25.1
 

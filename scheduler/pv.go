@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/devskill-org/energy-management-system/meteo"
-	"github.com/devskill-org/energy-management-system/sigenergy"
+	"github.com/devskill-org/ems/meteo"
+	"github.com/devskill-org/ems/sigenergy"
 )
 
 type WeatherForecastCache struct {

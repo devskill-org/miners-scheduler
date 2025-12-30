@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/devskill-org/energy-management-system/entsoe"
-	"github.com/devskill-org/energy-management-system/miners"
+	"github.com/devskill-org/ems/entsoe"
+	"github.com/devskill-org/ems/miners"
 	_ "github.com/lib/pq"
 )
 

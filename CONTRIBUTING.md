@@ -23,7 +23,7 @@ Thank you for your interest in contributing to the Energy Management System! Thi
    ```
 3. Add the upstream repository:
    ```bash
-   git remote add upstream https://github.com/devskill-org/energy-management-system.git
+   git remote add upstream https://github.com/devskill-org/ems.git
    ```
 
 ## Development Setup
