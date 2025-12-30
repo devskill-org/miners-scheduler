@@ -19,6 +19,7 @@ func main() {
 		configFile = flag.String("config", "config.json", "Configuration file path")
 		info       = flag.Bool("info", false, "Show Plant Information")
 		help       = flag.Bool("help", false, "Show help message")
+		serverOnly = flag.Bool("serverOnly", false, "Run only web server without periodic checks")
 	)
 	flag.Parse()
 
@@ -68,7 +69,7 @@ func main() {
 
 	// Start scheduler in a goroutine
 	go func() {
-		if err := minerScheduler.Start(ctx); err != nil {
+		if err := minerScheduler.Start(ctx, *serverOnly); err != nil {
 			if err != context.Canceled {
 				logger.Printf("Scheduler error: %v", err)
 			}
@@ -114,6 +115,9 @@ func showHelp() {
 	fmt.Println()
 	fmt.Println("  # Custom settings")
 	fmt.Println("  miners-scheduler --config=config.json")
+	fmt.Println()
+	fmt.Println("  # Run only web server without periodic checks")
+	fmt.Println("  miners-scheduler -serverOnly")
 	fmt.Println()
 	fmt.Println("  # Show this help")
 	fmt.Println("  miners-scheduler -help")

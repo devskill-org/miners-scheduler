@@ -28,8 +28,8 @@ type MinerScheduler struct {
 	// Weather forecast cache
 	weatherCache WeatherForecastCache
 
-	// Health server
-	healthServer *HealthServer
+	// Web server
+	webServer *WebServer
 
 	// Logging
 	logger *log.Logger
@@ -57,7 +57,7 @@ func NewMinerScheduler(config *Config, logger *log.Logger) *MinerScheduler {
 // NewMinerSchedulerWithHealthCheck creates a new scheduler instance with health check server
 func NewMinerSchedulerWithHealthCheck(config *Config, logger *log.Logger) *MinerScheduler {
 	scheduler := NewMinerScheduler(config, logger)
-	scheduler.healthServer = NewHealthServer(scheduler, config.HealthCheckPort)
+	scheduler.webServer = NewWebServer(scheduler, config.HealthCheckPort)
 	return scheduler
 }
 
@@ -99,7 +99,7 @@ func (s *MinerScheduler) getInitialDelay(now time.Time, delayInterval time.Durat
 }
 
 // Start begins the scheduler's periodic task
-func (s *MinerScheduler) Start(ctx context.Context) error {
+func (s *MinerScheduler) Start(ctx context.Context, serverOnly bool) error {
 	s.mu.Lock()
 	if s.isRunning {
 		s.mu.Unlock()
@@ -113,12 +113,16 @@ func (s *MinerScheduler) Start(ctx context.Context) error {
 		s.logger.Printf("DRY-RUN MODE ENABLED: Actions will be simulated only")
 	}
 
-	// Start health server if configured
-	if s.healthServer != nil {
-		if err := s.healthServer.Start(); err != nil {
-			s.logger.Printf("Failed to start health server: %v", err)
+	// Start web server if configured
+	if s.webServer != nil {
+		err := s.webServer.Start()
+		if err != nil {
+			s.logger.Printf("Failed to start web server: %v", err)
 		} else {
-			s.logger.Printf("Health server started on port %d", s.healthServer.port)
+			s.logger.Printf("Web server started on port %d", s.webServer.port)
+		}
+		if serverOnly {
+			return err
 		}
 	}
 
@@ -260,12 +264,12 @@ func (s *MinerScheduler) stop() {
 		close(s.stopChan)
 	}
 
-	// Stop health server if running
-	if s.healthServer != nil {
+	// Stop web server if running
+	if s.webServer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := s.healthServer.Stop(ctx); err != nil {
-			s.logger.Printf("Error stopping health server: %v", err)
+		if err := s.webServer.Stop(ctx); err != nil {
+			s.logger.Printf("Error stopping web server: %v", err)
 		}
 	}
 }
