@@ -1,7 +1,7 @@
 {
-  "name": "miners-scheduler-web",
+  "name": "energy-management-system-web",
   "version": "1.0.0",
-  "description": "Web UI for Miners Scheduler",
+  "description": "Web UI for Energy Management System",
   "private": true,
   "type": "module",
   "scripts": {

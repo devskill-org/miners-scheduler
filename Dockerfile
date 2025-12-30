@@ -17,7 +17,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o miners-scheduler .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o ems .
 
 # Final stage
 FROM alpine:latest
@@ -28,24 +28,24 @@ RUN apk add --no-cache ca-certificates tzdata
 ENV TZ=Europe/Riga
 
 # Create non-root user
-RUN addgroup -g 1001 miners && \
-    adduser -D -u 1001 -G miners miners
+RUN addgroup -g 1001 ems && \
+    adduser -D -u 1001 -G ems ems
 
 # Set working directory
 WORKDIR /app
 
 # Copy binary from builder stage
-COPY --from=builder /app/miners-scheduler .
+COPY --from=builder /app/ems .
 
 # Copy configuration example
 COPY config.json /app/config.json
 
 # Create directories for logs and data
 RUN mkdir -p /app/logs /app/data && \
-    chown -R miners:miners /app
+    chown -R ems:ems /app
 
 # Switch to non-root user
-USER miners
+USER ems
 
 # Expose health check port (if configured)
 EXPOSE 8080
@@ -55,4 +55,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Default command
-ENTRYPOINT ["./miners-scheduler"]
+ENTRYPOINT ["./ems"]

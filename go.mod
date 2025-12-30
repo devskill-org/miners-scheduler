@@ -1,4 +1,4 @@
-module github.com/devskill-org/miners-scheduler
+module github.com/devskill-org/energy-management-system
 
 go 1.25.1
 

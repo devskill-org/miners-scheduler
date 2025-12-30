@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/devskill-org/miners-scheduler/utils"
+	"github.com/devskill-org/energy-management-system/utils"
 )
 
 // APIClient represents an HTTP client for the ENTSO-E API

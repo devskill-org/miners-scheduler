@@ -55,13 +55,13 @@ To get coverage badges and detailed reports at [Codecov](https://codecov.io):
      - Value: Your Codecov token
 
 4. **View Coverage Reports**
-   - After the first workflow run, visit https://codecov.io/gh/devskill-org/miners-scheduler
+   - After the first workflow run, visit https://codecov.io/gh/devskill-org/energy-management-system
    - View detailed coverage reports, trends, and file-by-file analysis
    - The badge in README.md will automatically update
 
 **Badge:**
 ```markdown
-[![Coverage](https://codecov.io/gh/devskill-org/miners-scheduler/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/miners-scheduler)
+[![Coverage](https://codecov.io/gh/devskill-org/energy-management-system/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/energy-management-system)
 ```
 
 ### Alternative: Simple Test Status Badge
@@ -69,13 +69,13 @@ To get coverage badges and detailed reports at [Codecov](https://codecov.io):
 If you don't want to use Codecov, you can use just the test status badge:
 
 ```markdown
-[![Tests](https://github.com/devskill-org/miners-scheduler/actions/workflows/test.yml/badge.svg)](https://github.com/devskill-org/miners-scheduler/actions/workflows/test.yml)
+[![Tests](https://github.com/devskill-org/energy-management-system/actions/workflows/test.yml/badge.svg)](https://github.com/devskill-org/energy-management-system/actions/workflows/test.yml)
 ```
 
 ## Viewing Coverage Reports
 
 ### In Codecov
-1. Visit https://codecov.io/gh/devskill-org/miners-scheduler
+1. Visit https://codecov.io/gh/devskill-org/energy-management-system
 2. View coverage percentage, trends, and file-by-file breakdown
 3. See coverage changes in pull requests
 
@@ -110,9 +110,9 @@ Then open `coverage.html` in your browser.
 Add these badges to your README.md:
 
 ```markdown
-[![Tests](https://github.com/devskill-org/miners-scheduler/actions/workflows/test.yml/badge.svg)](https://github.com/devskill-org/miners-scheduler/actions/workflows/test.yml)
-[![Coverage](https://codecov.io/gh/devskill-org/miners-scheduler/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/miners-scheduler)
-[![Go Report Card](https://goreportcard.com/badge/github.com/devskill-org/miners-scheduler)](https://goreportcard.com/report/github.com/devskill-org/miners-scheduler)
+[![Tests](https://github.com/devskill-org/energy-management-system/actions/workflows/test.yml/badge.svg)](https://github.com/devskill-org/energy-management-system/actions/workflows/test.yml)
+[![Coverage](https://codecov.io/gh/devskill-org/energy-management-system/branch/main/graph/badge.svg)](https://codecov.io/gh/devskill-org/energy-management-system)
+[![Go Report Card](https://goreportcard.com/badge/github.com/devskill-org/energy-management-system)](https://goreportcard.com/report/github.com/devskill-org/energy-management-system)
 ```
 
 ## Troubleshooting

@@ -6,9 +6,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/devskill-org/miners-scheduler/meteo"
-	"github.com/devskill-org/miners-scheduler/mpc"
-	"github.com/devskill-org/miners-scheduler/sigenergy"
+	"github.com/devskill-org/energy-management-system/meteo"
+	"github.com/devskill-org/energy-management-system/mpc"
+	"github.com/devskill-org/energy-management-system/sigenergy"
 	"github.com/sixdouglas/suncalc"
 )
 
