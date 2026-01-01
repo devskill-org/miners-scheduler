@@ -24,17 +24,19 @@ func (s *MinerScheduler) runMPCOptimize(ctx context.Context) {
 		return
 	}
 
-	// Step 1: Read initial SOC from inverter
-	initialSOC, err := s.readInitialSOC(config)
+	// Step 1: Read plant running info from inverter
+	plantInfo, err := s.readPlantRunningInfo(config)
 	if err != nil {
-		s.logger.Printf("Error reading initial SOC from inverter: %v", err)
+		s.logger.Printf("Error reading plant running info from inverter: %v", err)
 		return
 	}
 
-	s.logger.Printf("Initial battery SOC: %.1f%%", initialSOC*100)
+	// Extract initial SOC from plant info
+	initialSOC := plantInfo.ESSSOC / 100.0 // Convert from percentage (0-100) to fraction (0-1)
+	s.logger.Printf("Initial battery SOC: %.1f%%", plantInfo.ESSSOC)
 
 	// Step 2: Get forecast data (prices, solar, load)
-	forecast, err := s.buildMPCForecast(ctx, config)
+	forecast, err := s.buildMPCForecast(ctx, config, plantInfo)
 	if err != nil {
 		s.logger.Printf("Error building MPC forecast: %v", err)
 		return
@@ -70,8 +72,18 @@ func (s *MinerScheduler) runMPCOptimize(ctx context.Context) {
 		return
 	}
 
-	// Step 5: Log optimization results
-	s.logMPCResults(forecast, decisions)
+	// Step 5: Save optimization results
+	s.mu.Lock()
+	s.mpcDecisions = decisions
+	s.mu.Unlock()
+
+	// Log summary
+	s.logger.Printf("MPC optimization completed with %d decisions", len(decisions))
+	totalProfit := 0.0
+	for _, dec := range decisions {
+		totalProfit += dec.Profit
+	}
+	s.logger.Printf("Total expected profit over %d hours: €%.2f", len(decisions), totalProfit)
 
 	// Step 6: Execute the first control decision
 	if err := s.executeMPCDecision(&decisions[0], true); err != nil {
@@ -82,29 +94,26 @@ func (s *MinerScheduler) runMPCOptimize(ctx context.Context) {
 	s.logger.Printf("MPC optimization task completed successfully")
 }
 
-// readInitialSOC reads the current State of Charge from the inverter
-func (s *MinerScheduler) readInitialSOC(config *Config) (float64, error) {
+// readPlantRunningInfo reads the plant running information from the inverter
+func (s *MinerScheduler) readPlantRunningInfo(config *Config) (*sigenergy.PlantRunningInfo, error) {
 	// Connect to Plant Modbus server
 	client, err := sigenergy.NewTCPClient(config.PlantModbusAddress, sigenergy.PlantAddress)
 	if err != nil {
-		return 0, fmt.Errorf("failed to connect to Plant Modbus: %w", err)
+		return nil, fmt.Errorf("failed to connect to Plant Modbus: %w", err)
 	}
 	defer client.Close()
 
-	// Read plant running info to get SOC
+	// Read plant running info
 	plantInfo, err := client.ReadPlantRunningInfo()
 	if err != nil {
-		return 0, fmt.Errorf("failed to read plant info: %w", err)
+		return nil, fmt.Errorf("failed to read plant info: %w", err)
 	}
 
-	// Convert SOC from percentage (0-100) to fraction (0-1)
-	socFraction := plantInfo.ESSSOC / 100.0
-
-	return socFraction, nil
+	return plantInfo, nil
 }
 
 // buildMPCForecast builds the forecast data needed for MPC optimization
-func (s *MinerScheduler) buildMPCForecast(ctx context.Context, config *Config) ([]mpc.TimeSlot, error) {
+func (s *MinerScheduler) buildMPCForecast(ctx context.Context, config *Config, plantInfo *sigenergy.PlantRunningInfo) ([]mpc.TimeSlot, error) {
 	now := time.Now()
 
 	// Get electricity price forecast
@@ -113,28 +122,41 @@ func (s *MinerScheduler) buildMPCForecast(ctx context.Context, config *Config) (
 		return nil, fmt.Errorf("failed to get price forecast: %w", err)
 	}
 
-	// Get solar forecast
-	solarForecasts, err := s.getSolarForecast(config, now)
+	// Get weather forecast for weather data
+	weatherForecast, err := s.getOrFetchWeatherForecast(config)
+	if err != nil {
+		s.logger.Printf("Warning: failed to get weather forecast: %v", err)
+		weatherForecast = nil
+	}
+
+	// Get solar forecast with weather data
+	solarForecasts, weatherData, err := s.getSolarForecast(config, now, weatherForecast, plantInfo)
 	if err != nil {
 		s.logger.Printf("Warning: failed to get solar forecast: %v, using zero solar", err)
 		// Continue with zero solar forecast
 		solarForecasts = make(map[int]float64)
+		weatherData = make(map[int]WeatherData)
 	}
 
 	// Build time slots
 	var timeSlots []mpc.TimeSlot
 	for hour, prices := range priceForecasts {
 		solar := solarForecasts[hour]
+		weather := weatherData[hour]
 
 		// Estimate load forecast (miners only, based on price and solar availability)
 		loadForecast := s.estimateLoadForecast(prices.Import, config.PriceLimit/1000, solar, config)
 
+		futureTime := now.Add(time.Duration(hour) * time.Hour)
 		timeSlots = append(timeSlots, mpc.TimeSlot{
 			Hour:          hour,
+			Timestamp:     futureTime.Unix(),
 			ImportPrice:   prices.Import / 1000.0, // Convert EUR/MWh to EUR/kWh
 			ExportPrice:   prices.Export / 1000.0, // Convert EUR/MWh to EUR/kWh
 			SolarForecast: solar,
 			LoadForecast:  loadForecast,
+			CloudCoverage: weather.CloudCoverage,
+			WeatherSymbol: weather.WeatherSymbol,
 		})
 	}
 
@@ -148,6 +170,12 @@ func (s *MinerScheduler) buildMPCForecast(ctx context.Context, config *Config) (
 	}
 
 	return timeSlots, nil
+}
+
+// WeatherData represents weather information for a specific hour
+type WeatherData struct {
+	CloudCoverage float64 // % cloud coverage (0-100)
+	WeatherSymbol string  // weather condition symbol
 }
 
 // PricePoint represents import and export prices for a specific hour
@@ -192,27 +220,32 @@ func (s *MinerScheduler) getPriceForecast(ctx context.Context, now time.Time) (m
 }
 
 // getSolarForecast gets solar power forecast from weather data
-func (s *MinerScheduler) getSolarForecast(config *Config, now time.Time) (map[int]float64, error) {
-	// Get weather forecast
-	weatherForecast, err := s.getOrFetchWeatherForecast(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get weather forecast: %w", err)
+func (s *MinerScheduler) getSolarForecast(config *Config, now time.Time, weatherForecast *meteo.METJSONForecast, plantInfo *sigenergy.PlantRunningInfo) (map[int]float64, map[int]WeatherData, error) {
+	if weatherForecast == nil || weatherForecast.Properties == nil {
+		return nil, nil, fmt.Errorf("invalid weather forecast data")
 	}
 
-	if weatherForecast == nil || weatherForecast.Properties == nil {
-		return nil, fmt.Errorf("invalid weather forecast data")
+	// Get current PV power to detect if panels are already covered by snow
+	currentPVPower := 0.0
+	if plantInfo != nil {
+		currentPVPower = plantInfo.PhotovoltaicPower
 	}
 
 	// Convert weather to solar forecast
 	solarForecast := make(map[int]float64)
+	weatherData := make(map[int]WeatherData)
 
 	for i := range 24 {
 		futureTime := now.Add(time.Duration(i) * time.Hour)
-		solarPower := s.estimateSolarPowerFromWeather(weatherForecast, futureTime, config.MaxSolarPower)
+		solarPower, cloudCoverage, weatherSymbol := s.estimateSolarPowerFromWeather(weatherForecast, futureTime, config.MaxSolarPower, currentPVPower)
 		solarForecast[i] = solarPower
+		weatherData[i] = WeatherData{
+			CloudCoverage: cloudCoverage,
+			WeatherSymbol: weatherSymbol,
+		}
 	}
 
-	return solarForecast, nil
+	return solarForecast, weatherData, nil
 }
 
 // getOrFetchWeatherForecast gets weather forecast from cache or fetches new one
@@ -242,9 +275,12 @@ func (s *MinerScheduler) getOrFetchWeatherForecast(config *Config) (*meteo.METJS
 }
 
 // estimateSolarPowerFromWeather estimates solar power output from weather data
-func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONForecast, targetTime time.Time, peakPower float64) float64 {
+func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONForecast, targetTime time.Time, peakPower float64, currentPVPower float64) (float64, float64, string) {
+	cloudCoverage := 0.0
+	weatherSymbol := ""
+
 	if forecast.Properties == nil || len(forecast.Properties.Timeseries) == 0 {
-		return 0
+		return 0, cloudCoverage, weatherSymbol
 	}
 
 	// Find closest time step
@@ -263,10 +299,20 @@ func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONFo
 	}
 
 	if closestStep == nil || closestStep.Data == nil || closestStep.Data.Instant == nil || closestStep.Data.Instant.Details == nil {
-		return 0
+		return 0, cloudCoverage, weatherSymbol
 	}
 
 	details := closestStep.Data.Instant.Details
+
+	// Get cloud coverage
+	if details.CloudAreaFraction != nil {
+		cloudCoverage = *details.CloudAreaFraction
+	}
+
+	// Get weather symbol
+	if symbol := closestStep.GetSymbolCode(); symbol != nil {
+		weatherSymbol = string(*symbol)
+	}
 
 	// Get location from config
 	config := s.GetConfig()
@@ -280,7 +326,7 @@ func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONFo
 
 	// Check if we're between sunrise and sunset
 	if targetTime.Before(sunrise) || targetTime.After(sunset) {
-		return 0 // No sun available
+		return 0, cloudCoverage, weatherSymbol // No sun available
 	}
 
 	// Get solar position to calculate altitude angle
@@ -292,7 +338,24 @@ func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONFo
 	// Use sine of altitude as a factor (0 at horizon, 1 at zenith)
 	solarAngleFactor := math.Sin(altitude)
 	if solarAngleFactor < 0 {
-		solarAngleFactor = 0 // Below horizon
+		return 0, cloudCoverage, weatherSymbol
+	}
+
+	// Check for snow conditions - PV panels covered by snow produce zero power
+	if symbol := closestStep.GetSymbolCode(); symbol != nil {
+		if symbol.HasSnow() {
+			s.logger.Printf("Snow detected in weather forecast at %s, setting solar power to zero", targetTime.Format(time.RFC3339))
+			return 0, cloudCoverage, weatherSymbol
+		}
+	}
+
+	// Check if panels are already covered by snow:
+	// If current PV power is zero but we expect power based on sun angle, panels might be covered
+	expectedPower := peakPower * solarAngleFactor * 0.5 // Rough estimate with some clouds
+	if currentPVPower < 0.1 && expectedPower > 1.0 && time.Until(targetTime).Hours() < 1 {
+		// Current power is essentially zero but we expect power - likely snow covered
+		s.logger.Printf("Current PV power is zero (%.2f kW) but forecast expects %.2f kW - panels may be snow covered", currentPVPower, expectedPower)
+		return 0, cloudCoverage, weatherSymbol
 	}
 
 	// Cloud factor (0-1, where 1 = no clouds)
@@ -305,25 +368,28 @@ func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONFo
 	// Estimate solar power
 	solarPower := peakPower * solarAngleFactor * cloudFactor
 
-	return solarPower
+	return solarPower, cloudCoverage, weatherSymbol
 }
 
 // estimateLoadForecast estimates power load based on price and available power
 // Follows the same logic as manageMiners: miners wake up in Eco mode when price <= limit,
 // but only if there's enough power budget (when PV power control is enabled)
+// When miners are not running, they still consume standby power
 func (s *MinerScheduler) estimateLoadForecast(hourlyPrice float64, priceLimit float64, solarForecast float64, config *Config) float64 {
 	// Convert hourlyPrice from EUR/MWh to EUR/kWh for comparison with priceLimit
 	hourlyPricePerKWh := hourlyPrice / 1000.0
-
-	// Miners are only ON if price is below or equal the limit
-	if hourlyPricePerKWh > priceLimit {
-		return 0.0
-	}
 
 	// Get discovered miners
 	minersList := s.GetDiscoveredMiners()
 	if len(minersList) == 0 {
 		return 0.0
+	}
+
+	// Miners are only ON if price is below or equal the limit
+	// Otherwise they consume standby power
+	if hourlyPricePerKWh > priceLimit {
+		// All miners are in standby mode
+		return float64(len(minersList)) * config.MinerPowerStandby
 	}
 
 	// Check if PV power control is enabled
@@ -350,57 +416,11 @@ func (s *MinerScheduler) estimateLoadForecast(hourlyPrice float64, priceLimit fl
 
 	maxMinersCanRun := int(effectiveLimit / minerPowerEco)
 	actualMinersRunning := min(maxMinersCanRun, len(minersList))
+	minersInStandby := len(minersList) - actualMinersRunning
 
-	totalMinerPower := float64(actualMinersRunning) * minerPowerEco
+	// Total power = running miners in Eco mode + standby miners in standby mode
+	totalMinerPower := float64(actualMinersRunning)*minerPowerEco + float64(minersInStandby)*config.MinerPowerStandby
 	return totalMinerPower
-}
-
-// logMPCResults logs the optimization results
-func (s *MinerScheduler) logMPCResults(forecast []mpc.TimeSlot, decisions []mpc.ControlDecision) {
-	s.logger.Printf("MPC Optimization Results:")
-	s.logger.Printf("Hour | Solar | Load  | Import  | Export  | Battery         | Grid         | SOC    | Profit")
-	s.logger.Printf("-----|-------|-------|---------|---------|-----------------|--------------|--------|-------")
-
-	totalProfit := 0.0
-	for i, dec := range decisions {
-		slot := forecast[i]
-
-		gridAction := "idle"
-		gridPower := 0.0
-		if dec.GridImport > 0.1 {
-			gridAction = "import"
-			gridPower = dec.GridImport
-		} else if dec.GridExport > 0.1 {
-			gridAction = "export"
-			gridPower = dec.GridExport
-		}
-
-		battAction := "idle"
-		battPower := 0.0
-		if dec.BatteryCharge > 0.1 {
-			battAction = "charge"
-			battPower = dec.BatteryCharge
-		} else if dec.BatteryDischarge > 0.1 {
-			battAction = "discharge"
-			battPower = dec.BatteryDischarge
-		}
-
-		totalProfit += dec.Profit
-
-		s.logger.Printf("%4d | %5.1f | %5.1f | €%.4f | €%.4f | %15s | %12s | %5.1f%% | €%.3f",
-			dec.Hour,
-			slot.SolarForecast,
-			slot.LoadForecast,
-			slot.ImportPrice,
-			slot.ExportPrice,
-			fmt.Sprintf("%s: %.1f", battAction, battPower),
-			fmt.Sprintf("%s: %.1f", gridAction, gridPower),
-			dec.BatterySOC*100,
-			dec.Profit,
-		)
-	}
-
-	s.logger.Printf("Total expected profit over %d hours: €%.2f", len(decisions), totalProfit)
 }
 
 // executeMPCDecision executes the first MPC control decision

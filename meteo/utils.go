@@ -1,6 +1,7 @@
 package meteo
 
 import (
+	"strings"
 	"time"
 )
 
@@ -180,32 +181,27 @@ func (ts *ForecastTimeStep) GetSymbolCode() *WeatherSymbol {
 
 // IsDay checks if the weather symbol indicates daytime conditions
 func (ws WeatherSymbol) IsDay() bool {
-	str := string(ws)
-	return len(str) >= 4 && str[len(str)-4:] == "_day"
+	return strings.HasSuffix(string(ws), "_day")
 }
 
 // IsNight checks if the weather symbol indicates nighttime conditions
 func (ws WeatherSymbol) IsNight() bool {
-	str := string(ws)
-	return len(str) >= 6 && str[len(str)-6:] == "_night"
+	return strings.HasSuffix(string(ws), "_night")
 }
 
 // IsPolarTwilight checks if the weather symbol indicates polar twilight conditions
 func (ws WeatherSymbol) IsPolarTwilight() bool {
-	str := string(ws)
-	return len(str) >= 14 && str[len(str)-14:] == "_polartwilight"
+	return strings.HasSuffix(string(ws), "_polartwilight")
 }
 
 // HasThunder checks if the weather symbol indicates thunder
 func (ws WeatherSymbol) HasThunder() bool {
-	str := string(ws)
-	// Check if contains "thunder" anywhere in the symbol
-	for i := 0; i <= len(str)-7; i++ {
-		if str[i:i+7] == "thunder" {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(string(ws), "thunder")
+}
+
+// HasSnow checks if the weather symbol indicates snow conditions
+func (ws WeatherSymbol) HasSnow() bool {
+	return strings.Contains(string(ws), "snow")
 }
 
 // IntPtr is a helper function to get a pointer to an int value

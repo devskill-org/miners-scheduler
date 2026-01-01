@@ -423,6 +423,37 @@ func TestWeatherSymbol_HasThunder(t *testing.T) {
 	}
 }
 
+func TestWeatherSymbol_HasSnow(t *testing.T) {
+	tests := []struct {
+		symbol   WeatherSymbol
+		expected bool
+	}{
+		{ClearSkyDay, false},
+		{Rain, false},
+		{LightSnow, true},
+		{Snow, true},
+		{HeavySnow, true},
+		{LightSnowShowersDay, true},
+		{SnowShowersNight, true},
+		{HeavySnowShowersDay, true},
+		{SnowAndThunder, true},
+		{LightSnowAndThunder, true},
+		{HeavySnowAndThunder, true},
+		{LightSnowShowersAndThunderDay, true},
+		{Cloudy, false},
+		{Fog, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.symbol), func(t *testing.T) {
+			result := tt.symbol.HasSnow()
+			if result != tt.expected {
+				t.Errorf("Expected HasSnow() = %v for symbol %s", tt.expected, tt.symbol)
+			}
+		})
+	}
+}
+
 func TestHelperFunctions(t *testing.T) {
 	// Test IntPtr
 	intVal := 42

@@ -308,6 +308,170 @@ body {
     gap: 1rem;
 }
 
+.solar-info {
+    background-color: rgba(30, 41, 59, 0.95);
+    border-radius: var(--border-radius);
+    border: 2px solid var(--color-primary);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+}
+
+.solar-info-content {
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.solar-info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.35rem 0.5rem;
+    background-color: rgba(51, 65, 85, 0.4);
+    border-radius: 4px;
+    border: 1px solid rgba(51, 65, 85, 0.6);
+}
+
+.solar-info-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+}
+
+.solar-info-value {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--color-text);
+    font-family: "Courier New", monospace;
+}
+
+/* MPC Decisions Styles */
+.mpc-summary {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background-color: rgba(51, 65, 85, 0.5);
+    border-radius: 6px;
+    flex-wrap: wrap;
+}
+
+.mpc-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.mpc-summary-label {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.mpc-summary-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.mpc-table-container {
+    overflow-x: auto;
+    border-radius: 6px;
+    border: 1px solid var(--color-border);
+}
+
+.mpc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.mpc-table thead {
+    background-color: rgba(51, 65, 85, 0.7);
+}
+
+.mpc-table th {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--color-text);
+    border-bottom: 2px solid var(--color-border);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+.mpc-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+.mpc-table tbody tr {
+    transition: background-color 0.2s;
+}
+
+.mpc-table tbody tr:hover {
+    background-color: rgba(51, 65, 85, 0.3);
+}
+
+.mpc-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Align numeric columns to the right */
+.mpc-table td:nth-child(4),
+.mpc-table td:nth-child(5),
+.mpc-table td:nth-child(6),
+.mpc-table td:nth-child(7),
+.mpc-table td:nth-child(8),
+.mpc-table td:nth-child(9) {
+    text-align: right;
+}
+
+/* Prevent wrapping in forecast and profit columns */
+.mpc-table th:nth-child(5),
+.mpc-table th:nth-child(6),
+.mpc-table th:nth-child(7),
+.mpc-table th:nth-child(8),
+.mpc-table th:nth-child(9),
+.mpc-table td:nth-child(5),
+.mpc-table td:nth-child(6),
+.mpc-table td:nth-child(7),
+.mpc-table td:nth-child(8),
+.mpc-table td:nth-child(9) {
+    white-space: nowrap;
+}
+
+/* Forecast data header styling */
+.mpc-table thead tr:first-child th {
+    vertical-align: middle;
+}
+
+.mpc-table thead tr:nth-child(2) th {
+    padding-top: 0.5rem;
+    padding-bottom: 0.75rem;
+    font-size: 0.7rem;
+}
+
+.action-charge,
+.action-import {
+    color: var(--color-warning);
+    font-weight: 600;
+}
+
+.action-discharge,
+.action-export {
+    color: var(--color-success);
+    font-weight: 600;
+}
+
+.action-idle {
+    color: var(--color-text-secondary);
+    font-style: italic;
+}
+
 @media (max-width: 768px) {
     .header {
         flex-direction: column;
@@ -350,5 +514,23 @@ body {
 
     .pv-power-value {
         font-size: 2rem;
+    }
+
+    .mpc-summary {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .mpc-table-container {
+        overflow-x: scroll;
+    }
+
+    .mpc-table {
+        font-size: 0.75rem;
+    }
+
+    .mpc-table th,
+    .mpc-table td {
+        padding: 0.5rem;
     }
 }
