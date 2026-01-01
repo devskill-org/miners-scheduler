@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/sixdouglas/suncalc"
 )
 
 // WebServer provides HTTP endpoints for health checking, monitoring, and web UI
@@ -31,6 +33,7 @@ type StatusResponse struct {
 	Scheduler SchedulerHealth `json:"scheduler"`
 	System    SystemHealth    `json:"system"`
 	EMS       EMSHealth       `json:"ems"`
+	Sun       SunInfo         `json:"sun"`
 }
 
 // SchedulerHealth represents scheduler-specific health information
@@ -60,6 +63,13 @@ type EMSHealth struct {
 	GridSensorStatus      uint16  `json:"grid_sensor_status"`
 	GridSensorActivePower float64 `json:"grid_sensor_active_power"`
 	PlantActivePower      float64 `json:"plant_active_power"`
+}
+
+// SunInfo represents solar position and timing information
+type SunInfo struct {
+	SolarAngle float64 `json:"solar_angle"`
+	Sunrise    string  `json:"sunrise"`
+	Sunset     string  `json:"sunset"`
 }
 
 // NewWebServer creates a new web server with health endpoints and static file serving
@@ -379,6 +389,18 @@ func (hs *WebServer) buildStatusData() map[string]any {
 			GridSensorActivePower: info.GridSensorActivePower,
 			PlantActivePower:      info.PlantActivePower,
 		}
+	}
+
+	// Calculate sun information
+	config := hs.scheduler.GetConfig()
+	now := time.Now()
+	sunTimes := suncalc.GetTimes(now, config.Latitude, config.Longitude)
+	sunPos := suncalc.GetPosition(now, config.Latitude, config.Longitude)
+
+	health.Sun = SunInfo{
+		SolarAngle: sunPos.Altitude * 180 / math.Pi, // Convert radians to degrees
+		Sunrise:    sunTimes["sunrise"].Value.Format(time.RFC3339),
+		Sunset:     sunTimes["sunset"].Value.Format(time.RFC3339),
 	}
 
 	priceData := map[string]any{
