@@ -73,7 +73,7 @@ func (mpc *MPCController) Optimize(forecast []TimeSlot) []ControlDecision {
 	// Use dynamic programming for optimization
 	// State: SOC level, Time: hour
 	// We'll discretize SOC into steps for tractability
-	socSteps := 20
+	socSteps := 200
 	socStep := (mpc.Config.BatteryMaxSOC - mpc.Config.BatteryMinSOC) / float64(socSteps)
 
 	// DP table: [time][soc_index] -> (best_profit, best_decision)
