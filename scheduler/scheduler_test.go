@@ -76,6 +76,11 @@ func mockEnergyPricesServer() *httptest.Server {
 	}))
 }
 
+// mockMinerDiscovery returns an empty list of miners to avoid real network requests
+func mockMinerDiscovery(ctx context.Context, network string) []*miners.AvalonQHost {
+	return []*miners.AvalonQHost{}
+}
+
 // testConfig creates a basic config for testing with all required fields
 func testConfig() *Config {
 	return testConfigWithServer(nil)
@@ -130,6 +135,8 @@ func TestNewMinerScheduler(t *testing.T) {
 				t.Fatal("NewMinerScheduler returned nil")
 			}
 
+			scheduler.minerDiscoveryFunc = mockMinerDiscovery
+
 			status := scheduler.GetStatus()
 
 			if status.IsRunning {
@@ -149,26 +156,27 @@ func TestDryRunConfiguration(t *testing.T) {
 		dryRun bool
 	}{
 		{
-			name:   "dry-run enabled",
+			name:   "dry run enabled",
 			dryRun: true,
 		},
 		{
-			name:   "dry-run disabled",
+			name:   "dry run disabled",
 			dryRun: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := DefaultConfig()
+			config := testConfig()
 			config.DryRun = tt.dryRun
-			config.SecurityToken = "test-token"
 
 			scheduler := NewMinerScheduler(config, nil)
 
 			if scheduler == nil {
 				t.Fatal("NewMinerScheduler returned nil")
 			}
+
+			scheduler.minerDiscoveryFunc = mockMinerDiscovery
 
 			actualConfig := scheduler.GetConfig()
 			if actualConfig.DryRun != tt.dryRun {
@@ -183,6 +191,7 @@ func TestSchedulerRunningState(t *testing.T) {
 	defer mockServer.Close()
 
 	scheduler := NewMinerScheduler(testConfigWithServer(mockServer), nil)
+	scheduler.minerDiscoveryFunc = mockMinerDiscovery
 
 	// Initially not running
 	if scheduler.IsRunning() {
@@ -211,8 +220,8 @@ func TestSchedulerRunningState(t *testing.T) {
 	// Wait for completion
 	select {
 	case err := <-done:
-		if err != context.Canceled {
-			t.Errorf("Expected context.Canceled error, got %v", err)
+		if err != nil {
+			t.Errorf("Unexpected error, got %v", err)
 		}
 	case <-time.After(2 * time.Second):
 		t.Error("Scheduler did not stop within timeout")
@@ -228,6 +237,7 @@ func TestSchedulerDoubleStart(t *testing.T) {
 	defer mockServer.Close()
 
 	scheduler := NewMinerScheduler(testConfigWithServer(mockServer), nil)
+	scheduler.minerDiscoveryFunc = mockMinerDiscovery
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -256,6 +266,7 @@ func TestSchedulerStop(t *testing.T) {
 	defer mockServer.Close()
 
 	scheduler := NewMinerScheduler(testConfigWithServer(mockServer), nil)
+	scheduler.minerDiscoveryFunc = mockMinerDiscovery
 	ctx := context.Background()
 
 	// Start scheduler
@@ -289,6 +300,7 @@ func TestSchedulerStop(t *testing.T) {
 
 func TestGetDiscoveredMiners(t *testing.T) {
 	scheduler := NewMinerScheduler(testConfig(), nil)
+	scheduler.minerDiscoveryFunc = mockMinerDiscovery
 
 	// Initially empty
 	minersList := scheduler.GetDiscoveredMiners()
@@ -330,6 +342,8 @@ func TestDiscoverMinersPreservesExisting(t *testing.T) {
 	config := testConfig()
 	config.Network = "127.0.0.1/32"
 	scheduler := NewMinerScheduler(config, nil)
+	// Mock discovery to return no miners (simulating network scan that finds nothing)
+	scheduler.minerDiscoveryFunc = mockMinerDiscovery
 
 	// Mock some initial miners
 	initialMiners := []*miners.AvalonQHost{
@@ -375,6 +389,7 @@ func TestDiscoverMinersPreservesExisting(t *testing.T) {
 
 func TestGetStatus(t *testing.T) {
 	scheduler := NewMinerScheduler(testConfig(), nil)
+	scheduler.minerDiscoveryFunc = mockMinerDiscovery
 
 	status := scheduler.GetStatus()
 
@@ -393,6 +408,7 @@ func TestGetStatus(t *testing.T) {
 
 func TestSchedulerStatus_WithData(t *testing.T) {
 	scheduler := NewMinerScheduler(testConfig(), nil)
+	scheduler.minerDiscoveryFunc = mockMinerDiscovery
 
 	// Add some mock data
 	mockMiners := []*miners.AvalonQHost{
@@ -427,6 +443,7 @@ func TestSchedulerStatus_WithData(t *testing.T) {
 
 func TestSchedulerConcurrency(t *testing.T) {
 	scheduler := NewMinerScheduler(testConfig(), nil)
+	scheduler.minerDiscoveryFunc = mockMinerDiscovery
 
 	// Test concurrent access to methods
 	done := make(chan bool, 10)
@@ -467,6 +484,7 @@ func TestSchedulerConcurrency(t *testing.T) {
 // Benchmark tests
 func BenchmarkSchedulerGetStatus(b *testing.B) {
 	scheduler := NewMinerScheduler(testConfig(), nil)
+	scheduler.minerDiscoveryFunc = mockMinerDiscovery
 
 	// Add some mock data
 	mockMiners := make([]*miners.AvalonQHost, 100)
@@ -625,6 +643,7 @@ func TestGetInitialDelay(t *testing.T) {
 
 func BenchmarkSchedulerGetDiscoveredMiners(b *testing.B) {
 	scheduler := NewMinerScheduler(testConfig(), nil)
+	scheduler.minerDiscoveryFunc = mockMinerDiscovery
 
 	// Add mock miners
 	mockMiners := make([]*miners.AvalonQHost, 1000)
@@ -646,13 +665,13 @@ func BenchmarkSchedulerGetDiscoveredMiners(b *testing.B) {
 }
 
 func TestMinersStateCheckInterval(t *testing.T) {
-	config := DefaultConfig()
-	config.MinersStateCheckInterval = 30 * time.Second
-
+	config := testConfig()
+	config.MinersStateCheckInterval = 2 * time.Second
 	scheduler := NewMinerScheduler(config, nil)
+	scheduler.minerDiscoveryFunc = mockMinerDiscovery
 
-	if scheduler.config.MinersStateCheckInterval != 30*time.Second {
-		t.Errorf("Expected MinersStateCheckInterval 30s, got %v", scheduler.config.MinersStateCheckInterval)
+	if scheduler.config.MinersStateCheckInterval != 2*time.Second {
+		t.Errorf("Expected MinersStateCheckInterval 2s, got %v", scheduler.config.MinersStateCheckInterval)
 	}
 
 	// Test that default is 1 minute
@@ -663,11 +682,12 @@ func TestMinersStateCheckInterval(t *testing.T) {
 }
 
 func TestRunStateCheckDryRun(t *testing.T) {
-	config := DefaultConfig()
+	config := testConfig()
 	config.DryRun = true
 	config.MinersStateCheckInterval = 10 * time.Second
 
 	scheduler := NewMinerScheduler(config, nil)
+	scheduler.minerDiscoveryFunc = mockMinerDiscovery
 
 	// Test that runStateCheck doesn't panic with no miners
 	scheduler.runStateCheck(context.Background())
@@ -675,5 +695,40 @@ func TestRunStateCheckDryRun(t *testing.T) {
 	// Verify the method exists and can be called
 	if scheduler.config.DryRun != true {
 		t.Error("Expected DryRun to be true")
+	}
+}
+
+func TestMockMinerDiscovery(t *testing.T) {
+	config := testConfig()
+	scheduler := NewMinerScheduler(config, nil)
+
+	// Create a custom mock that tracks if it was called
+	mockCalled := false
+	customMock := func(ctx context.Context, network string) []*miners.AvalonQHost {
+		mockCalled = true
+		// Return some test miners
+		return []*miners.AvalonQHost{
+			{Address: "192.168.1.100", Port: 4028},
+			{Address: "192.168.1.101", Port: 4028},
+		}
+	}
+
+	scheduler.minerDiscoveryFunc = customMock
+
+	// Run discovery
+	err := scheduler.discoverMiners(context.Background())
+	if err != nil {
+		t.Errorf("discoverMiners failed: %v", err)
+	}
+
+	// Verify mock was called
+	if !mockCalled {
+		t.Error("Expected mock discovery function to be called")
+	}
+
+	// Verify miners were discovered
+	miners := scheduler.GetDiscoveredMiners()
+	if len(miners) != 2 {
+		t.Errorf("Expected 2 miners, got %d", len(miners))
 	}
 }

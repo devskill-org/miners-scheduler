@@ -340,6 +340,15 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("miner_power_super must be non-negative, got: %f", c.MinerPowerSuper)
 	}
 
+	// Validate PV integration settings
+	if c.PVPollInterval <= 0 {
+		return fmt.Errorf("pv_poll_interval must be greater than 0, got: %s", c.PVPollInterval)
+	}
+
+	if c.PVIntegrationPeriod <= 0 {
+		return fmt.Errorf("pv_integration_period must be greater than 0, got: %s", c.PVIntegrationPeriod)
+	}
+
 	return nil
 }
 

@@ -14,6 +14,57 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// PeriodicTask represents a task that runs periodically with an optional initial delay
+type PeriodicTask struct {
+	name         string
+	initialDelay time.Duration
+	interval     time.Duration
+	runFunc      func()
+}
+
+// run executes the periodic task in a loop, respecting the initial delay and context cancellation
+func (pt *PeriodicTask) run(ctx context.Context, stopChan <-chan struct{}, logger *log.Logger) {
+	// Wait for initial delay
+	if pt.initialDelay > 0 {
+		logger.Printf("[%s] Waiting for initial delay: %v", pt.name, pt.initialDelay)
+		select {
+		case <-time.After(pt.initialDelay):
+			// Initial delay passed, run the task
+			logger.Printf("[%s] Initial delay passed, running first iteration", pt.name)
+			pt.runFunc()
+		case <-ctx.Done():
+			logger.Printf("[%s] Stopped during initial delay due to context cancellation", pt.name)
+			return
+		case <-stopChan:
+			logger.Printf("[%s] Stopped during initial delay due to stop signal", pt.name)
+			return
+		}
+	} else {
+		// No initial delay, run immediately
+		logger.Printf("[%s] Running immediately (no initial delay)", pt.name)
+		pt.runFunc()
+	}
+
+	// Create ticker for periodic execution
+	ticker := time.NewTicker(pt.interval)
+	defer ticker.Stop()
+
+	logger.Printf("[%s] Started with interval: %v", pt.name, pt.interval)
+
+	for {
+		select {
+		case <-ticker.C:
+			pt.runFunc()
+		case <-ctx.Done():
+			logger.Printf("[%s] Stopped due to context cancellation", pt.name)
+			return
+		case <-stopChan:
+			logger.Printf("[%s] Stopped due to stop signal", pt.name)
+			return
+		}
+	}
+}
+
 type MinerScheduler struct {
 	// Configuration
 	config *Config
@@ -37,6 +88,9 @@ type MinerScheduler struct {
 
 	// Logging
 	logger *log.Logger
+
+	// Test hooks for dependency injection
+	minerDiscoveryFunc func(ctx context.Context, network string) []*miners.AvalonQHost
 }
 
 // NewMinerScheduler creates a new scheduler instance
@@ -70,7 +124,6 @@ func (s *MinerScheduler) SetConfig(config *Config) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.config = config
-	s.logger.Printf("Configuration updated")
 }
 
 // GetConfig returns the current configuration
@@ -130,119 +183,88 @@ func (s *MinerScheduler) Start(ctx context.Context, serverOnly bool) error {
 		}
 	}
 
-	// Run the first checks immediately
-	go func() {
-		s.runMinerDiscovery(ctx)
-		s.runPriceCheck(ctx)
-		s.runMPCOptimize(ctx)
-	}()
-
 	config := s.GetConfig()
 
-	// PV integration state
-	pvSamples := &PVSamples{}
-	var pvDB *sql.DB
-	var pvDBErr error
+	// Data integration state
+	dataSamples := &DataSamples{}
+	var dataDB *sql.DB
+	var dataDBErr error
 	if s.config.PostgresConnString != "" {
-		pvDB, pvDBErr = sql.Open("postgres", s.config.PostgresConnString)
-		if pvDBErr != nil {
-			s.logger.Printf("PV integration: failed to connect to DB: %v", pvDBErr)
-			pvDB = nil
+		dataDB, dataDBErr = sql.Open("postgres", s.config.PostgresConnString)
+		if dataDBErr != nil {
+			s.logger.Printf("Data integration: failed to connect to DB: %v", dataDBErr)
+			dataDB = nil
 		}
 	}
 
-	// Get initial delays
+	// Calculate initial delays
 	now := time.Now()
 	minersControlInitialDelay := s.getInitialDelay(now, config.CheckPriceInterval) + time.Second
 	pvDataInitialDelay := s.getInitialDelay(now, config.PVIntegrationPeriod)
-	s.logger.Printf("Schedule next miners check for %v", now.Add(minersControlInitialDelay))
-	s.logger.Printf("Schedule next PV data collection for %v", now.Add(pvDataInitialDelay))
+	stateCheckInitialDelay := s.getInitialDelay(now, config.MinersStateCheckInterval)
 
-	// Only create PV tickers if intervals are configured
-	var pvTicker *time.Ticker
-	var pvResetTicker *time.Ticker
-	if config.PVPollInterval > 0 {
-		pvTicker = time.NewTicker(config.PVPollInterval)
-		defer pvTicker.Stop()
+	// Create periodic tasks
+	tasks := []PeriodicTask{
+		{
+			name:         "MinerDiscovery",
+			initialDelay: 0, // Run immediately
+			interval:     config.MinerDiscoveryInterval,
+			runFunc: func() {
+				s.runMinerDiscovery(ctx)
+			},
+		},
+		{
+			name:         "PriceCheckAndMPC",
+			initialDelay: minersControlInitialDelay,
+			interval:     config.CheckPriceInterval,
+			runFunc: func() {
+				s.runPriceCheck(ctx)
+				s.runMPCOptimize(ctx)
+			},
+		},
+		{
+			name:         "StateCheck",
+			initialDelay: stateCheckInitialDelay,
+			interval:     config.MinersStateCheckInterval,
+			runFunc: func() {
+				s.runStateCheck(ctx)
+			},
+		},
+		{
+			name:         "DataPoll",
+			initialDelay: pvDataInitialDelay,
+			interval:     config.PVPollInterval,
+			runFunc: func() {
+				s.runDataPoll(dataSamples)
+			},
+		},
+		{
+			name:         "DataIntegration",
+			initialDelay: pvDataInitialDelay,
+			interval:     config.PVIntegrationPeriod,
+			runFunc: func() {
+				s.runDataIntegration(dataSamples, config.PVPollInterval, dataDB, config.DeviceID, config.DryRun)
+			},
+		},
 	}
-	if config.PVIntegrationPeriod > 0 {
-		pvResetTicker = time.NewTicker(config.PVIntegrationPeriod)
-		defer pvResetTicker.Stop()
+
+	// Start each periodic task in its own goroutine
+	var wg sync.WaitGroup
+	for _, task := range tasks {
+		wg.Add(1)
+		task := task // capture loop variable
+		go func() {
+			defer wg.Done()
+			task.run(ctx, s.stopChan, s.logger)
+		}()
 	}
 
-	priceCheckTicker := time.NewTicker(config.CheckPriceInterval)
-	defer priceCheckTicker.Stop()
+	// Wait for all tasks to complete
+	wg.Wait()
 
-	stateCheckTicker := time.NewTicker(config.MinersStateCheckInterval)
-	defer stateCheckTicker.Stop()
-
-	minerDiscoveryTicker := time.NewTicker(config.MinerDiscoveryInterval)
-	defer minerDiscoveryTicker.Stop()
-
-	minersControlInitialDelayTick := time.After(minersControlInitialDelay)
-	minersControlInitialDelayPassed := false
-
-	pvDataInitialDelayTick := time.After(pvDataInitialDelay)
-	pvDataInitialDelayPassed := false
-
-	for {
-		select {
-		case <-ctx.Done():
-			s.logger.Printf("Scheduler stopping due to context cancellation")
-			s.stop()
-			return ctx.Err()
-		case <-s.stopChan:
-			s.logger.Printf("Scheduler stopping due to stop signal")
-			return nil
-		case <-minersControlInitialDelayTick:
-			go s.runPriceCheck(ctx)
-			go s.runMPCOptimize(ctx)
-			priceCheckTicker.Reset(config.CheckPriceInterval)
-			minersControlInitialDelayPassed = true
-		case <-pvDataInitialDelayTick:
-			if config.PVPollInterval > 0 {
-				go s.runPVPoll(pvSamples)
-				if pvTicker != nil {
-					pvTicker.Reset(config.PVPollInterval)
-				}
-				if pvResetTicker != nil {
-					pvResetTicker.Reset(config.PVIntegrationPeriod)
-				}
-				pvDataInitialDelayPassed = true
-			}
-		case <-priceCheckTicker.C:
-			if minersControlInitialDelayPassed {
-				go s.runPriceCheck(ctx)
-				go s.runMPCOptimize(ctx)
-			}
-		case <-stateCheckTicker.C:
-			go s.runStateCheck(ctx)
-		case <-minerDiscoveryTicker.C:
-			go s.runMinerDiscovery(ctx)
-		case <-func() <-chan time.Time {
-			if pvTicker != nil {
-				return pvTicker.C
-			}
-			// Return a channel that never sends
-			ch := make(chan time.Time)
-			return ch
-		}():
-			if pvDataInitialDelayPassed && pvTicker != nil {
-				go s.runPVPoll(pvSamples)
-			}
-		case <-func() <-chan time.Time {
-			if pvResetTicker != nil {
-				return pvResetTicker.C
-			}
-			// Return a channel that never sends
-			ch := make(chan time.Time)
-			return ch
-		}():
-			if pvDataInitialDelayPassed && pvResetTicker != nil {
-				go s.runPVIntegration(pvSamples, config.PVPollInterval, pvDB, config.DeviceID, config.DryRun)
-			}
-		}
-	}
+	s.logger.Printf("All periodic tasks stopped")
+	s.stop()
+	return nil
 }
 
 // Stop gracefully stops the scheduler

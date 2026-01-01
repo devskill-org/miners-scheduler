@@ -13,7 +13,13 @@ import (
 func (s *MinerScheduler) discoverMiners(ctx context.Context) error {
 	s.logger.Printf("Discovering miners on network: %s", s.config.Network)
 
-	newlyDiscoveredMiners := miners.Discover(ctx, s.config.Network)
+	// Use injected discovery function for testing, otherwise use default
+	var newlyDiscoveredMiners []*miners.AvalonQHost
+	if s.minerDiscoveryFunc != nil {
+		newlyDiscoveredMiners = s.minerDiscoveryFunc(ctx, s.config.Network)
+	} else {
+		newlyDiscoveredMiners = miners.Discover(ctx, s.config.Network)
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
