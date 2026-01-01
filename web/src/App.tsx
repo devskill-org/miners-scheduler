@@ -4,6 +4,7 @@ import { InfoItem } from "./components/InfoItem";
 import { StatusBadge } from "./components/StatusBadge";
 import { PowerDisplay } from "./components/PowerDisplay";
 import { SolarInfo } from "./components/SolarInfo";
+import { MPCDecisions } from "./components/MPCDecisions";
 import { useWebSocket } from "./hooks/useWebSocket";
 
 function App() {
@@ -134,6 +135,7 @@ function App() {
 
             <PowerDisplay
               value={health?.ems?.ess_power}
+              invertColors={true}
               label={
                 health?.ems?.ess_soc !== undefined
                   ? `${health.ems.ess_soc.toFixed(1)}%`
@@ -182,6 +184,8 @@ function App() {
             />
           </div>
         </section>
+
+        <MPCDecisions decisions={health?.scheduler.mpc_decisions} />
 
         <section className="card system-info">
           <h2>System Information</h2>

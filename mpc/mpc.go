@@ -20,21 +20,32 @@ type SystemConfig struct {
 // TimeSlot represents one hour of operation
 type TimeSlot struct {
 	Hour          int
+	Timestamp     int64   // Unix timestamp when this time slot begins
 	ImportPrice   float64 // $/kWh
 	ExportPrice   float64 // $/kWh
 	SolarForecast float64 // kW average for the hour
 	LoadForecast  float64 // kW average for the hour
+	CloudCoverage float64 // % cloud coverage (0-100)
+	WeatherSymbol string  // weather condition symbol
 }
 
 // ControlDecision represents the optimal control for one time slot
 type ControlDecision struct {
 	Hour             int
+	Timestamp        int64   // Unix timestamp when this time slot begins
 	BatteryCharge    float64 // kW (positive = charging)
 	BatteryDischarge float64 // kW (positive = discharging)
 	GridImport       float64 // kW (positive = importing)
 	GridExport       float64 // kW (positive = exporting)
 	BatterySOC       float64 // percentage (0-1)
 	Profit           float64 // $ for this hour
+	// Forecast data used for this decision
+	ImportPrice   float64 // $/kWh
+	ExportPrice   float64 // $/kWh
+	SolarForecast float64 // kW average for the hour
+	LoadForecast  float64 // kW average for the hour
+	CloudCoverage float64 // % cloud coverage (0-100)
+	WeatherSymbol string  // weather condition symbol
 }
 
 // MPCController implements Model Predictive Control
@@ -114,6 +125,13 @@ func (mpc *MPCController) Optimize(forecast []TimeSlot) []ControlDecision {
 					dp[t+1][newSOCIdx].decision = dec
 					dp[t+1][newSOCIdx].decision.BatterySOC = newSOC
 					dp[t+1][newSOCIdx].decision.Profit = profit
+					dp[t+1][newSOCIdx].decision.Timestamp = slot.Timestamp
+					dp[t+1][newSOCIdx].decision.ImportPrice = slot.ImportPrice
+					dp[t+1][newSOCIdx].decision.ExportPrice = slot.ExportPrice
+					dp[t+1][newSOCIdx].decision.SolarForecast = slot.SolarForecast
+					dp[t+1][newSOCIdx].decision.LoadForecast = slot.LoadForecast
+					dp[t+1][newSOCIdx].decision.CloudCoverage = slot.CloudCoverage
+					dp[t+1][newSOCIdx].decision.WeatherSymbol = slot.WeatherSymbol
 					dp[t+1][newSOCIdx].prevSOC = socIdx
 				}
 			}
@@ -179,6 +197,7 @@ func (mpc *MPCController) generateFeasibleDecisions(currentSOC float64, slot Tim
 	for _, action := range batteryActions {
 		dec := ControlDecision{
 			Hour:             slot.Hour,
+			Timestamp:        slot.Timestamp,
 			BatteryCharge:    action.charge,
 			BatteryDischarge: action.discharge,
 		}

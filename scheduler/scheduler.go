@@ -10,6 +10,7 @@ import (
 
 	"github.com/devskill-org/ems/entsoe"
 	"github.com/devskill-org/ems/miners"
+	"github.com/devskill-org/ems/mpc"
 	_ "github.com/lib/pq"
 )
 
@@ -27,6 +28,9 @@ type MinerScheduler struct {
 
 	// Weather forecast cache
 	weatherCache WeatherForecastCache
+
+	// MPC optimization results
+	mpcDecisions []mpc.ControlDecision
 
 	// Web server
 	webServer *WebServer
@@ -291,6 +295,21 @@ func (s *MinerScheduler) GetStatus() SchedulerStatus {
 		MinersCount:   len(s.discoveredMiners),
 		HasMarketData: s.pricesMarketData != nil,
 	}
+}
+
+// GetMPCDecisions returns a copy of the stored MPC decisions
+func (s *MinerScheduler) GetMPCDecisions() []mpc.ControlDecision {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.mpcDecisions == nil {
+		return nil
+	}
+
+	// Return a copy
+	decisionsCopy := make([]mpc.ControlDecision, len(s.mpcDecisions))
+	copy(decisionsCopy, s.mpcDecisions)
+	return decisionsCopy
 }
 
 // SchedulerStatus represents the current status of the scheduler

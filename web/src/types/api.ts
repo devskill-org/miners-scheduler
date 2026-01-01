@@ -1,9 +1,28 @@
+export interface MPCDecisionInfo {
+  hour: number;
+  timestamp: number;
+  battery_charge: number;
+  battery_discharge: number;
+  grid_import: number;
+  grid_export: number;
+  battery_soc: number;
+  profit: number;
+  // Forecast data used for this decision
+  import_price: number;
+  export_price: number;
+  solar_forecast: number;
+  load_forecast: number;
+  cloud_coverage: number;
+  weather_symbol: string;
+}
+
 export interface SchedulerStatus {
   is_running: boolean;
   miners_count: number;
   has_market_data: boolean;
   price_limit: number;
   network: string;
+  mpc_decisions?: MPCDecisionInfo[];
 }
 
 export interface HealthResponse {

@@ -52,8 +52,10 @@ func main() {
 			loadForecast = 2.5 // Higher during active hours
 		}
 
+		futureTime := time.Now().Add(time.Duration(i) * time.Hour)
 		forecast[i] = mpc.TimeSlot{
 			Hour:          i,
+			Timestamp:     futureTime.Unix(),
 			ImportPrice:   importPrice,
 			ExportPrice:   exportPrice,
 			SolarForecast: solarForecast,

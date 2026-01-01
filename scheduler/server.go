@@ -38,14 +38,34 @@ type StatusResponse struct {
 
 // SchedulerHealth represents scheduler-specific health information
 type SchedulerHealth struct {
-	IsRunning          bool       `json:"is_running"`
-	MinersCount        int        `json:"miners_count"`
-	LastCheck          *time.Time `json:"last_check,omitempty"`
-	HasMarketData      bool       `json:"has_market_data"`
-	LastDocumentTime   *time.Time `json:"last_document_time,omitempty"`
-	PriceLimit         float64    `json:"price_limit"`
-	Network            string     `json:"network"`
-	CheckPriceInterval string     `json:"check_price_interval"`
+	IsRunning          bool              `json:"is_running"`
+	MinersCount        int               `json:"miners_count"`
+	LastCheck          *time.Time        `json:"last_check,omitempty"`
+	HasMarketData      bool              `json:"has_market_data"`
+	LastDocumentTime   *time.Time        `json:"last_document_time,omitempty"`
+	PriceLimit         float64           `json:"price_limit"`
+	Network            string            `json:"network"`
+	CheckPriceInterval string            `json:"check_price_interval"`
+	MPCDecisions       []MPCDecisionInfo `json:"mpc_decisions,omitempty"`
+}
+
+// MPCDecisionInfo represents MPC optimization decision information for API
+type MPCDecisionInfo struct {
+	Hour             int     `json:"hour"`
+	Timestamp        int64   `json:"timestamp"`
+	BatteryCharge    float64 `json:"battery_charge"`
+	BatteryDischarge float64 `json:"battery_discharge"`
+	GridImport       float64 `json:"grid_import"`
+	GridExport       float64 `json:"grid_export"`
+	BatterySOC       float64 `json:"battery_soc"`
+	Profit           float64 `json:"profit"`
+	// Forecast data used for this decision
+	ImportPrice   float64 `json:"import_price"`
+	ExportPrice   float64 `json:"export_price"`
+	SolarForecast float64 `json:"solar_forecast"`
+	LoadForecast  float64 `json:"load_forecast"`
+	CloudCoverage float64 `json:"cloud_coverage"`
+	WeatherSymbol string  `json:"weather_symbol"`
 }
 
 // SystemHealth represents system-level health information
@@ -166,6 +186,28 @@ func (hs *WebServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 	status := hs.scheduler.GetStatus()
 
+	// Get MPC decisions and convert to API format
+	mpcDecisions := hs.scheduler.GetMPCDecisions()
+	mpcDecisionsInfo := make([]MPCDecisionInfo, 0, len(mpcDecisions))
+	for _, dec := range mpcDecisions {
+		mpcDecisionsInfo = append(mpcDecisionsInfo, MPCDecisionInfo{
+			Hour:             dec.Hour,
+			Timestamp:        dec.Timestamp,
+			BatteryCharge:    dec.BatteryCharge,
+			BatteryDischarge: dec.BatteryDischarge,
+			GridImport:       dec.GridImport,
+			GridExport:       dec.GridExport,
+			BatterySOC:       dec.BatterySOC,
+			Profit:           dec.Profit,
+			ImportPrice:      dec.ImportPrice,
+			ExportPrice:      dec.ExportPrice,
+			SolarForecast:    dec.SolarForecast,
+			LoadForecast:     dec.LoadForecast,
+			CloudCoverage:    dec.CloudCoverage,
+			WeatherSymbol:    dec.WeatherSymbol,
+		})
+	}
+
 	response := StatusResponse{
 		Status:    "healthy",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
@@ -176,6 +218,7 @@ func (hs *WebServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 			HasMarketData: status.HasMarketData,
 			PriceLimit:    hs.scheduler.GetConfig().PriceLimit,
 			Network:       hs.scheduler.GetConfig().Network,
+			MPCDecisions:  mpcDecisionsInfo,
 		},
 		System: SystemHealth{
 			Uptime:     formatUptime(time.Since(hs.startTime)),
@@ -364,6 +407,28 @@ func (hs *WebServer) buildStatusData() map[string]any {
 		overallStatus = "degraded"
 	}
 
+	// Get MPC decisions and convert to API format
+	mpcDecisions := hs.scheduler.GetMPCDecisions()
+	mpcDecisionsInfo := make([]MPCDecisionInfo, 0, len(mpcDecisions))
+	for _, dec := range mpcDecisions {
+		mpcDecisionsInfo = append(mpcDecisionsInfo, MPCDecisionInfo{
+			Hour:             dec.Hour,
+			Timestamp:        dec.Timestamp,
+			BatteryCharge:    dec.BatteryCharge,
+			BatteryDischarge: dec.BatteryDischarge,
+			GridImport:       dec.GridImport,
+			GridExport:       dec.GridExport,
+			BatterySOC:       dec.BatterySOC,
+			Profit:           dec.Profit,
+			ImportPrice:      dec.ImportPrice,
+			ExportPrice:      dec.ExportPrice,
+			SolarForecast:    dec.SolarForecast,
+			LoadForecast:     dec.LoadForecast,
+			CloudCoverage:    dec.CloudCoverage,
+			WeatherSymbol:    dec.WeatherSymbol,
+		})
+	}
+
 	health := StatusResponse{
 		Status:    overallStatus,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
@@ -374,6 +439,7 @@ func (hs *WebServer) buildStatusData() map[string]any {
 			HasMarketData: status.HasMarketData,
 			PriceLimit:    hs.scheduler.GetConfig().PriceLimit,
 			Network:       hs.scheduler.GetConfig().Network,
+			MPCDecisions:  mpcDecisionsInfo,
 		},
 		System: SystemHealth{
 			Uptime:     formatUptime(time.Since(hs.startTime)),
