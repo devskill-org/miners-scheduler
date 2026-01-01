@@ -63,6 +63,8 @@ type EMSHealth struct {
 	GridSensorStatus      uint16  `json:"grid_sensor_status"`
 	GridSensorActivePower float64 `json:"grid_sensor_active_power"`
 	PlantActivePower      float64 `json:"plant_active_power"`
+	DCChargerOutputPower  float64 `json:"dc_charger_output_power"`
+	DCChargerVehicleSOC   float64 `json:"dc_charger_vehicle_soc"`
 }
 
 // SunInfo represents solar position and timing information
@@ -388,6 +390,8 @@ func (hs *WebServer) buildStatusData() map[string]any {
 			GridSensorStatus:      info.GridSensorStatus,
 			GridSensorActivePower: info.GridSensorActivePower,
 			PlantActivePower:      info.PlantActivePower,
+			DCChargerOutputPower:  info.DCChargerOutputPower,
+			DCChargerVehicleSOC:   info.DCChargerVehicleSOC,
 		}
 	}
 

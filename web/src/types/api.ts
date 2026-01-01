@@ -22,6 +22,8 @@ export interface HealthResponse {
     grid_sensor_status: number;
     grid_sensor_active_power: number;
     plant_active_power: number;
+    dc_charger_output_power: number;
+    dc_charger_vehicle_soc: number;
   };
   sun: {
     solar_angle: number;

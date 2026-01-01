@@ -159,6 +159,16 @@ function App() {
               style={{ position: "absolute", top: "194px", left: "223px" }}
             />
 
+            <PowerDisplay
+              value={health?.ems?.dc_charger_output_power}
+              label={
+                health?.ems?.dc_charger_vehicle_soc !== undefined
+                  ? `${health.ems.dc_charger_vehicle_soc.toFixed(1)}%`
+                  : "N/A"
+              }
+              style={{ position: "absolute", top: "428px", right: "162px" }}
+            />
+
             <SolarInfo
               solarAngle={health?.sun?.solar_angle}
               sunrise={health?.sun?.sunrise}

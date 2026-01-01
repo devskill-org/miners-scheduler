@@ -91,6 +91,13 @@ func ShowPlantInfo(plantModbusAddress string) error {
 	fmt.Printf("  Available Min Reactive Power:   %.3f kVar\n", info.AvailableMinReactivePower)
 	fmt.Println()
 
+	// DC Charger Information
+	fmt.Println("DC CHARGER")
+	fmt.Println("--------------------------------------------------")
+	fmt.Printf("  Output Power:                   %.3f kW\n", info.DCChargerOutputPower)
+	fmt.Printf("  Vehicle SOC:                    %.1f %%\n", info.DCChargerVehicleSOC)
+	fmt.Println()
+
 	// Alarms
 	if info.GeneralAlarm1 != 0 || info.GeneralAlarm2 != 0 || info.GeneralAlarm3 != 0 || info.GeneralAlarm4 != 0 {
 		fmt.Println("ALARMS")

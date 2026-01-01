@@ -154,6 +154,8 @@ type PlantRunningInfo struct {
 	ESSChargeOffSOC                 float64 // %
 	ESSDischargeOffSOC              float64 // %
 	ESSSOH                          float64 // %
+	DCChargerOutputPower            float64 // kW
+	DCChargerVehicleSOC             float64 // %
 }
 
 // ReadPlantRunningInfo reads plant running information (slave address 247)
@@ -207,6 +209,13 @@ func (c *SigenModbusClient) ReadPlantRunningInfo() (*PlantRunningInfo, error) {
 		info.ESSChargeOffSOC = float64(bytesToU16(data2[4:6])) / 10.0
 		info.ESSDischargeOffSOC = float64(bytesToU16(data2[6:8])) / 10.0
 		info.ESSSOH = float64(bytesToU16(data2[8:10])) / 10.0
+	}
+
+	// Read DC Charger data (31502-31504)
+	data3, err := c.client.ReadInputRegisters(31502, 3)
+	if err == nil {
+		info.DCChargerOutputPower = float64(bytesToS32(data3[0:4])) / 1000.0
+		info.DCChargerVehicleSOC = float64(bytesToU16(data3[4:6])) / 10.0
 	}
 
 	return info, nil
