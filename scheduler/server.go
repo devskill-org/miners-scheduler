@@ -94,6 +94,16 @@ type SunInfo struct {
 	Sunset     string  `json:"sunset"`
 }
 
+// MetricsSummary represents aggregated metrics data
+type MetricsSummary struct {
+	TotalImportCost float64 `json:"total_import_cost"`
+	TotalExportCost float64 `json:"total_export_cost"`
+	TotalImportKWh  float64 `json:"total_import_kwh"`
+	TotalExportKWh  float64 `json:"total_export_kwh"`
+	StartTime       string  `json:"start_time"`
+	EndTime         string  `json:"end_time"`
+}
+
 // NewWebServer creates a new web server with health endpoints and static file serving
 func NewWebServer(scheduler *MinerScheduler, port int) *WebServer {
 	if port <= 0 {
@@ -127,6 +137,7 @@ func NewWebServer(scheduler *MinerScheduler, port int) *WebServer {
 	mux.HandleFunc("/api/health", hs.healthHandler)
 	mux.HandleFunc("/api/ready", hs.readinessHandler)
 	mux.HandleFunc("/api/ws", hs.wsHandler)
+	mux.HandleFunc("/api/metrics/summary", hs.metricsSummaryHandler)
 
 	// Serve static files from web folder
 	fs := http.FileServer(http.Dir("./web/dist"))
@@ -259,6 +270,81 @@ func (hs *WebServer) readinessHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(ready); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// metricsSummaryHandler handles the /api/metrics/summary endpoint
+func (hs *WebServer) metricsSummaryHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse query parameters for time range
+	startTimeStr := r.URL.Query().Get("start_time")
+	endTimeStr := r.URL.Query().Get("end_time")
+
+	var startTime, endTime time.Time
+	var err error
+
+	if startTimeStr != "" && endTimeStr != "" {
+		// Use provided time range
+		startTime, err = time.Parse(time.RFC3339, startTimeStr)
+		if err != nil {
+			http.Error(w, "Invalid start_time format. Use RFC3339 format", http.StatusBadRequest)
+			return
+		}
+		endTime, err = time.Parse(time.RFC3339, endTimeStr)
+		if err != nil {
+			http.Error(w, "Invalid end_time format. Use RFC3339 format", http.StatusBadRequest)
+			return
+		}
+	} else {
+		// Default to yesterday (calendar past date - midnight to midnight)
+		now := time.Now()
+		yesterday := now.AddDate(0, 0, -1)
+		startTime = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, yesterday.Location())
+		endTime = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 23, 59, 59, 999999999, yesterday.Location())
+	}
+
+	// Query the database for aggregated metrics
+	db := hs.scheduler.db
+	if db == nil {
+		http.Error(w, "Database not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	fmt.Println("Fetching data from", startTime, endTime)
+
+	var summary MetricsSummary
+	err = db.QueryRow(`
+		SELECT
+			COALESCE(SUM(grid_import_cost), 0) as total_import_cost,
+			COALESCE(SUM(grid_export_cost), 0) as total_export_cost,
+			COALESCE(SUM(grid_import_power), 0) as total_import_kwh,
+			COALESCE(SUM(grid_export_power), 0) as total_export_kwh
+		FROM metrics
+		WHERE timestamp >= $1 AND timestamp <= $2
+		AND metric_name = 'energy_flow'
+	`, startTime, endTime).Scan(
+		&summary.TotalImportCost,
+		&summary.TotalExportCost,
+		&summary.TotalImportKWh,
+		&summary.TotalExportKWh,
+	)
+
+	if err != nil {
+		fmt.Printf("Failed to query metrics: %v\n", err)
+		http.Error(w, "Failed to query metrics", http.StatusInternalServerError)
+		return
+	}
+
+	summary.StartTime = startTime.Format(time.RFC3339)
+	summary.EndTime = endTime.Format(time.RFC3339)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(summary); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 }
