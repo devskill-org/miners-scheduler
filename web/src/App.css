@@ -375,6 +375,14 @@ body {
     color: var(--color-text);
 }
 
+.mpc-summary-value.value-success {
+    color: var(--color-success);
+}
+
+.mpc-summary-value.value-error {
+    color: var(--color-error);
+}
+
 .mpc-table-container {
     overflow-x: auto;
     border-radius: 6px;

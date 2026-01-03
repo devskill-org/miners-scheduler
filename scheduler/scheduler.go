@@ -86,6 +86,9 @@ type MinerScheduler struct {
 	// Web server
 	webServer *WebServer
 
+	// Database connection
+	db *sql.DB
+
 	// Logging
 	logger *log.Logger
 
@@ -194,6 +197,8 @@ func (s *MinerScheduler) Start(ctx context.Context, serverOnly bool) error {
 		if dataDBErr != nil {
 			s.logger.Printf("Data integration: failed to connect to DB: %v", dataDBErr)
 			dataDB = nil
+		} else {
+			s.db = dataDB
 		}
 	}
 

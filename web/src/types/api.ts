@@ -73,6 +73,15 @@ export interface StatusResponse {
   timestamp: string;
 }
 
+export interface MetricsSummary {
+  total_import_cost: number;
+  total_export_cost: number;
+  total_import_kwh: number;
+  total_export_kwh: number;
+  start_time: string;
+  end_time: string;
+}
+
 export interface WebSocketMessage {
   type: string;
   health: HealthResponse;

@@ -5,6 +5,7 @@ import { StatusBadge } from "./components/StatusBadge";
 import { PowerDisplay } from "./components/PowerDisplay";
 import { SolarInfo } from "./components/SolarInfo";
 import { MPCDecisions } from "./components/MPCDecisions";
+import { MetricsSummary } from "./components/MetricsSummary";
 import { useWebSocket } from "./hooks/useWebSocket";
 
 function App() {
@@ -186,6 +187,8 @@ function App() {
         </section>
 
         <MPCDecisions decisions={health?.scheduler.mpc_decisions} />
+
+        <MetricsSummary />
 
         <section className="card system-info">
           <h2>System Information</h2>

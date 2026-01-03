@@ -83,7 +83,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
   if (!decisions || decisions.length === 0) {
     return (
       <section className="card">
-        <h2>MPC Optimization</h2>
+        <h2>Model Predictive Control Optimization Results</h2>
         <div className="info-grid">
           <p>No optimization data available yet.</p>
         </div>
@@ -130,7 +130,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
 
   return (
     <section className="card">
-      <h2>MPC Optimization Results</h2>
+      <h2>Model Predictive Control Optimization Results</h2>
       <div className="mpc-summary">
         <div className="mpc-summary-item">
           <span className="mpc-summary-label">Decisions:</span>
