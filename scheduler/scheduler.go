@@ -172,6 +172,8 @@ func (s *MinerScheduler) Start(ctx context.Context, serverOnly bool) error {
 
 	if s.config.DryRun {
 		s.logger.Printf("DRY-RUN MODE ENABLED: Actions will be simulated only")
+	} else {
+		s.GetMarketData(ctx) //nolint:gosec
 	}
 
 	// Start web server if configured

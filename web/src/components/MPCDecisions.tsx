@@ -94,6 +94,15 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
   // Calculate total profit
   const totalProfit = decisions.reduce((sum, dec) => sum + dec.profit, 0);
 
+  // Find highest and lowest import/export prices
+  const importPrices = decisions.map((d) => d.import_price);
+  const exportPrices = decisions.map((d) => d.export_price);
+
+  const highestImport = Math.max(...importPrices);
+  const lowestImport = Math.min(...importPrices);
+  const highestExport = Math.max(...exportPrices);
+  const lowestExport = Math.min(...exportPrices);
+
   // Helper function to determine battery action
   const getBatteryAction = (decision: MPCDecisionInfo) => {
     if (decision.battery_charge > 0.1) {
@@ -198,8 +207,32 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
                     </span>
                   </td>
                   <td>{(decision.battery_soc * 100).toFixed(1)}%</td>
-                  <td>{(decision.import_price * 1000).toFixed(2)}</td>
-                  <td>{(decision.export_price * 1000).toFixed(2)}</td>
+                  <td>
+                    <span
+                      className={
+                        decision.import_price === highestImport
+                          ? "price-highest"
+                          : decision.import_price === lowestImport
+                            ? "price-lowest"
+                            : ""
+                      }
+                    >
+                      {(decision.import_price * 1000).toFixed(2)}
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      className={
+                        decision.export_price === highestExport
+                          ? "price-highest"
+                          : decision.export_price === lowestExport
+                            ? "price-lowest"
+                            : ""
+                      }
+                    >
+                      {(decision.export_price * 1000).toFixed(2)}
+                    </span>
+                  </td>
                   <td>{decision.solar_forecast.toFixed(1)}</td>
                   <td>{decision.load_forecast.toFixed(1)}</td>
                   <td>{decision.cloud_coverage.toFixed(0)}</td>

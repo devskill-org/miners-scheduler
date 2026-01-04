@@ -114,7 +114,7 @@ func DefaultConfig() *Config {
 		BatteryMinSOC:            0.0,   // 0%
 		BatteryMaxSOC:            1.0,   // 100%
 		BatteryEfficiency:        0.92,  // 92% round-trip
-		BatteryDegradationCost:   0.05,  // $0.05 per kWh cycled
+		BatteryDegradationCost:   0.0,   // $0.00 per kWh cycled
 		MaxGridImport:            30.0,  // 30 kW
 		MaxGridExport:            30.0,  // 30 kW
 		MaxSolarPower:            30.0,  // 30 kW peak solar power

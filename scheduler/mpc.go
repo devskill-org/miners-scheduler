@@ -192,7 +192,7 @@ type PricePoint struct {
 	Export float64 // EUR/MWh
 }
 
-// getPriceForecast gets electricity prices for the next 24 hours
+// getPriceForecast gets electricity prices for the next 36 hours
 func (s *MinerScheduler) getPriceForecast(ctx context.Context, now time.Time) (map[int]PricePoint, error) {
 
 	// Get the market data
@@ -207,9 +207,9 @@ func (s *MinerScheduler) getPriceForecast(ctx context.Context, now time.Time) (m
 	// Get configuration for price adjustments
 	config := s.GetConfig()
 
-	// Extract prices for next 24 hours
+	// Extract prices for next 36 hours
 	forecast := make(map[int]PricePoint)
-	for i := range 24 {
+	for i := range 36 {
 		futureTime := now.Add(time.Duration(i) * time.Hour)
 		price, found := marketData.LookupAveragePriceInHourByTime(futureTime)
 
@@ -243,7 +243,7 @@ func (s *MinerScheduler) getSolarForecast(config *Config, now time.Time, weather
 	solarForecast := make(map[int]float64)
 	weatherData := make(map[int]WeatherData)
 
-	for i := range 24 {
+	for i := range 36 {
 		futureTime := now.Add(time.Duration(i) * time.Hour)
 		solarPower, cloudCoverage, weatherSymbol := s.estimateSolarPowerFromWeather(weatherForecast, futureTime, config.MaxSolarPower, currentPVPower)
 		solarForecast[i] = solarPower

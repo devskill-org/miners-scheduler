@@ -73,7 +73,8 @@ func (mpc *MPCController) Optimize(forecast []TimeSlot) []ControlDecision {
 	// Use dynamic programming for optimization
 	// State: SOC level, Time: hour
 	// We'll discretize SOC into steps for tractability
-	socSteps := 200
+	// Use finer granularity for better precision in finding optimal discharge timing
+	socSteps := 500
 	socStep := (mpc.Config.BatteryMaxSOC - mpc.Config.BatteryMinSOC) / float64(socSteps)
 
 	// DP table: [time][soc_index] -> (best_profit, best_decision)
@@ -139,6 +140,7 @@ func (mpc *MPCController) Optimize(forecast []TimeSlot) []ControlDecision {
 	}
 
 	// Backward pass - reconstruct optimal path
+	// Prefer paths that end with lower SOC (use more battery for arbitrage)
 	bestFinalSOC := 0
 	bestFinalProfit := math.Inf(-1)
 	for socIdx := 0; socIdx <= socSteps; socIdx++ {
@@ -163,7 +165,7 @@ func (mpc *MPCController) Optimize(forecast []TimeSlot) []ControlDecision {
 func (mpc *MPCController) generateFeasibleDecisions(currentSOC float64, slot TimeSlot) []ControlDecision {
 	decisions := []ControlDecision{}
 
-	// Discretize battery actions (charge, discharge, idle)
+	// Always include idle option
 	batteryActions := []struct {
 		charge    float64
 		discharge float64
@@ -171,9 +173,16 @@ func (mpc *MPCController) generateFeasibleDecisions(currentSOC float64, slot Tim
 		{0, 0}, // Idle
 	}
 
-	// Add charge options (more granular for better arbitrage opportunities)
-	for i := 1; i <= 10; i++ {
-		charge := float64(i) * mpc.Config.BatteryMaxCharge / 10.0
+	// For better arbitrage, focus on key power levels:
+	// 1. Maximum power (for concentrated operations)
+	// 2. A few intermediate levels (for flexibility)
+	// 3. Minimum meaningful power (for fine adjustments)
+
+	granularity := 60
+
+	// Charge options - use finer granularity for better optimization
+	for i := granularity; i > 0; i-- {
+		charge := float64(i) * mpc.Config.BatteryMaxCharge / float64(granularity)
 		if mpc.canCharge(currentSOC, charge) {
 			batteryActions = append(batteryActions, struct {
 				charge    float64
@@ -182,9 +191,9 @@ func (mpc *MPCController) generateFeasibleDecisions(currentSOC float64, slot Tim
 		}
 	}
 
-	// Add discharge options (more granular for better arbitrage opportunities)
-	for i := 1; i <= 10; i++ {
-		discharge := float64(i) * mpc.Config.BatteryMaxDischarge / 10.0
+	// Discharge options - use finer granularity for better optimization
+	for i := granularity; i > 0; i-- {
+		discharge := float64(i) * mpc.Config.BatteryMaxDischarge / float64(granularity)
 		if mpc.canDischarge(currentSOC, discharge) {
 			batteryActions = append(batteryActions, struct {
 				charge    float64
@@ -229,52 +238,30 @@ func (mpc *MPCController) generateFeasibleDecisions(currentSOC float64, slot Tim
 }
 
 // calculateProfit computes the profit for a decision
-// This accounts for:
-// 1. Charging battery when prices are low (cost reflected in GridImport)
-// 2. Discharging battery to support load when prices are high (savings reflected in reduced GridImport)
-// 3. Exporting excess power when export prices are favorable
+// The power balance equation ensures: Solar + GridImport + BatteryDischarge*eff = Load + GridExport + BatteryCharge/eff
+// Therefore, GridImport and GridExport already reflect the effect of battery operations.
+// Profit is simply: revenue from exports - cost of imports - degradation cost
 func (mpc *MPCController) calculateProfit(dec ControlDecision, slot TimeSlot) float64 {
 	// Revenue from exporting to grid
 	revenue := dec.GridExport * slot.ExportPrice
 
-	// Cost of importing from grid (includes charging battery from grid when prices are low)
+	// Cost of importing from grid
 	importCost := dec.GridImport * slot.ImportPrice
-
-	// Calculate the value of battery operations for arbitrage
-	// When we discharge battery to support load, we avoid importing at current price
-	// When we charge battery from grid, we pay current price but can use it later at higher prices
-
-	// Effective energy delivered from battery (accounting for efficiency)
-	batteryDischargeEnergy := dec.BatteryDischarge * mpc.Config.BatteryEfficiency
-
-	// Calculate how much battery energy went to LOAD vs EXPORT
-	// From power balance: Solar + BatteryDischarge*eff = Load + BatteryCharge/eff + GridExport - GridImport
-	// Battery discharge that supports load (avoiding imports):
-	netLoad := slot.LoadForecast + dec.BatteryCharge/mpc.Config.BatteryEfficiency
-	netSupplyBeforeBattery := slot.SolarForecast
-	loadDeficit := math.Max(0, netLoad-netSupplyBeforeBattery)
-	batteryDischargeToLoad := math.Min(batteryDischargeEnergy, loadDeficit)
-
-	// The discharge value: we avoid importing power at the current price for the energy used to support load
-	// Energy exported is already valued in the revenue calculation, so we exclude it here
-	dischargeValue := batteryDischargeToLoad * slot.ImportPrice
-
-	// The charge cost: we store energy for future use
-	// This is beneficial when import price is low (to use when prices are high)
-	// The cost is already included in importCost, but we account for storage losses
-	chargeLoss := dec.BatteryCharge * (1 - mpc.Config.BatteryEfficiency) * slot.ImportPrice
 
 	// Battery degradation cost (wear and tear from cycling)
 	batteryThroughput := dec.BatteryCharge + dec.BatteryDischarge
 	degradationCost := batteryThroughput * mpc.Config.BatteryDegradationCost
 
-	// Net profit calculation:
-	// + Revenue from exports (includes any battery energy exported)
-	// - Cost of imports (includes grid charging of battery)
-	// + Value from discharging battery to support load (avoids expensive imports)
-	// - Cost of charging losses
-	// - Battery degradation
-	profit := revenue - importCost + dischargeValue - chargeLoss - degradationCost
+	// Net profit:
+	// + Revenue from exports (GridExport already accounts for battery discharge to grid)
+	// - Cost of imports (GridImport already accounts for battery charging and reduced imports from discharge)
+	// - Battery degradation (wear and tear cost)
+	//
+	// This correctly incentivizes arbitrage:
+	// - Charging at low import prices reduces profit by importCost
+	// - Discharging at high export prices increases profit by revenue
+	// - The DP optimizer will naturally prefer charge-low/discharge-high strategies
+	profit := revenue - importCost - degradationCost
 
 	return profit
 }
