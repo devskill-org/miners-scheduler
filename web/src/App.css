@@ -428,16 +428,6 @@ body {
     border-bottom: none;
 }
 
-/* Align numeric columns to the right */
-.mpc-table td:nth-child(4),
-.mpc-table td:nth-child(5),
-.mpc-table td:nth-child(6),
-.mpc-table td:nth-child(7),
-.mpc-table td:nth-child(8),
-.mpc-table td:nth-child(9) {
-    text-align: right;
-}
-
 /* Prevent wrapping in forecast and profit columns */
 .mpc-table th:nth-child(5),
 .mpc-table th:nth-child(6),
@@ -478,6 +468,20 @@ body {
 .action-idle {
     color: var(--color-text-secondary);
     font-style: italic;
+}
+
+.price-highest {
+    background-color: rgba(239, 68, 68, 0.2);
+    font-weight: 600;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+.price-lowest {
+    background-color: rgba(34, 197, 94, 0.2);
+    font-weight: 600;
+    padding: 2px 4px;
+    border-radius: 3px;
 }
 
 @media (max-width: 768px) {
