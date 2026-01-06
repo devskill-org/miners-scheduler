@@ -403,8 +403,8 @@ func (s *MinerScheduler) estimateLoadForecast(hourlyPrice float64, priceLimit fl
 	// Check if PV power control is enabled
 	usePowerControl := config.UsePVPowerControl
 	if !usePowerControl {
-		// Without power control, all miners can run in Eco mode
-		totalMinerPower := float64(len(minersList)) * config.MinerPowerEco
+		// Without power control, all miners can run in Super mode
+		totalMinerPower := float64(len(minersList)) * config.MinerPowerSuper
 		return totalMinerPower
 	}
 

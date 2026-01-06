@@ -26,7 +26,7 @@
   "battery_min_soc": 0.0,
   "battery_max_soc": 1.0,
   "battery_efficiency": 0.92,
-  "battery_degradation_cost": 0.05,
+  "battery_degradation_cost": 0.01,
   "max_grid_import": 30.0,
   "max_grid_export": 30.0,
   "max_solar_power": 30.0,

@@ -311,7 +311,7 @@ func (s *MinerScheduler) runStateCheck(ctx context.Context) {
 
 	// Check if PV power control is enabled
 	usePowerControl := s.config.UsePVPowerControl
-	var effectiveLimit float64
+	effectiveLimit := s.config.MinersPowerLimit
 	var totalPower float64
 
 	if usePowerControl {
