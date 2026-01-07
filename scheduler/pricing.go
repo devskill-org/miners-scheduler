@@ -17,7 +17,13 @@ func (s *MinerScheduler) GetPricesMarketData() *entsoe.PublicationMarketData {
 
 // GetMarketData returns the latest PublicationMarketData, downloading new data if needed
 func (s *MinerScheduler) GetMarketData(ctx context.Context) (*entsoe.PublicationMarketData, error) {
-	now := time.Now()
+
+	location, err := time.LoadLocation(s.config.Location)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().In(location)
 
 	s.mu.RLock()
 	marketData := s.pricesMarketData
@@ -36,11 +42,6 @@ func (s *MinerScheduler) GetMarketData(ctx context.Context) (*entsoe.Publication
 		s.logger.Printf("No cached pricing data available, downloading new PublicationMarketData...")
 	}
 
-	location, err := time.LoadLocation(s.config.Location)
-	if err != nil {
-		return nil, err
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -49,11 +50,11 @@ func (s *MinerScheduler) GetMarketData(ctx context.Context) (*entsoe.Publication
 		return nil, fmt.Errorf("failed to download PublicationMarketData: %w", err)
 	}
 
-	// Calculate next expiry time at 13:00
-	nextExpiry := time.Date(now.Year(), now.Month(), now.Day(), 13, 0, 0, 0, location)
+	// Calculate next expiry time at 14:00
+	nextExpiry := time.Date(now.Year(), now.Month(), now.Day(), 14, 0, 0, 0, location)
 
-	// If it's already past 13:00 today, set expiry to 13:00 tomorrow
-	if now.Hour() >= 13 {
+	// If it's already past 14:00 today, set expiry to 14:00 tomorrow
+	if now.Hour() >= 14 {
 		nextExpiry = nextExpiry.Add(24 * time.Hour)
 	}
 

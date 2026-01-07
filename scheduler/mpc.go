@@ -72,11 +72,19 @@ func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) {
 		return
 	}
 
-	// Step 5: Save optimization results
+	// Step 5: Save optimization results to memory
 	s.mu.Lock()
 	s.mpcDecisions = decisions
-	s.lastMPCExecutionError = nil // Clear any previous execution error
+	s.lastExecutedDecision = nil // Clear last executed decision for new optimization
 	s.mu.Unlock()
+
+	// Step 5.1: Persist decisions to database (only when not in dry run mode)
+	if !config.DryRun {
+		if err := s.saveMPCDecisions(ctx, decisions); err != nil {
+			s.logger.Printf("Warning: Failed to save MPC decisions to database: %v", err)
+			// Continue execution even if persistence fails
+		}
+	}
 
 	// Log summary
 	s.logger.Printf("MPC optimization completed with %d decisions", len(decisions))
@@ -91,7 +99,13 @@ func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) {
 
 	// Record execution status
 	s.mu.Lock()
-	s.lastMPCExecutionError = err
+	if err != nil {
+		// Execution failed, set lastExecutedDecision to nil
+		s.lastExecutedDecision = nil
+	} else {
+		// Execution succeeded, store the executed decision
+		s.lastExecutedDecision = &decisions[0]
+	}
 	s.mu.Unlock()
 
 	if err != nil {
@@ -524,15 +538,7 @@ func (s *MinerScheduler) executeMPCDecision(decision *mpc.ControlDecision, dryRu
 // This ensures the decision is applied even if previous execution failed
 func (s *MinerScheduler) runMPCExecution() {
 
-	// Check if last execution failed
 	s.mu.RLock()
-	lastError := s.lastMPCExecutionError
-	if lastError == nil {
-		// Last execution succeeded, no need to retry
-		s.mu.RUnlock()
-		return
-	}
-
 	config := s.GetConfig()
 
 	// Check if Plant Modbus Address is configured
@@ -541,27 +547,58 @@ func (s *MinerScheduler) runMPCExecution() {
 		return
 	}
 
-	// Get current MPC decision
+	// Get current MPC decision based on current timestamp
 	if len(s.mpcDecisions) == 0 {
 		s.mu.RUnlock()
 		return
 	}
-	currentDecision := s.mpcDecisions[0]
-	s.mu.RUnlock()
 
-	s.logger.Printf("Retrying MPC decision execution (previous error: %v)", lastError)
+	now := time.Now().Unix()
+	var currentDecision *mpc.ControlDecision
 
-	// Execute the current decision
-	err := s.executeMPCDecision(&currentDecision, config.DryRun)
+	// Find the decision that matches the current hour
+	for i := range s.mpcDecisions {
+		decision := &s.mpcDecisions[i]
+		// Check if current time falls within this decision's hour
+		// Each decision covers a 1-hour window starting from its timestamp
+		if now >= decision.Timestamp && now < decision.Timestamp+3600 {
+			currentDecision = decision
+			break
+		}
+	}
 
-	s.mu.Lock()
-	s.lastMPCExecutionError = err
-	s.mu.Unlock()
-
-	if err != nil {
-		s.logger.Printf("Error retrying MPC decision: %v (will retry again in 1 minute)", err)
+	if currentDecision == nil {
+		// No matching decision found for current timestamp
+		s.mu.RUnlock()
 		return
 	}
 
-	s.logger.Printf("Successfully retried MPC decision execution")
+	lastExecuted := s.lastExecutedDecision
+	s.mu.RUnlock()
+
+	// Check if this decision has already been executed
+	if lastExecuted != nil && currentDecision.Timestamp == lastExecuted.Timestamp {
+		// Decision already executed, no need to retry
+		return
+	}
+
+	s.logger.Printf("Executing MPC decision for timestamp %d (hour %d)", currentDecision.Timestamp, currentDecision.Hour)
+
+	// Execute the current decision
+	err := s.executeMPCDecision(currentDecision, config.DryRun)
+
+	s.mu.Lock()
+	if err != nil {
+		// Execution failed, set lastExecutedDecision to nil
+		s.lastExecutedDecision = nil
+		s.mu.Unlock()
+		s.logger.Printf("Error executing MPC decision: %v (will retry again in 1 minute)", err)
+		return
+	}
+
+	// Execution succeeded, store the executed decision
+	s.lastExecutedDecision = currentDecision
+	s.mu.Unlock()
+
+	s.logger.Printf("Successfully executed MPC decision")
 }
