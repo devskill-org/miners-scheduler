@@ -202,6 +202,16 @@ func (s *MinerScheduler) Start(ctx context.Context, serverOnly bool) error {
 			dataDB = nil
 		} else {
 			s.db = dataDB
+
+			// Load latest MPC decisions from database
+			if decisions, err := s.loadLatestMPCDecisions(ctx); err != nil {
+				s.logger.Printf("Warning: Failed to load MPC decisions from database: %v", err)
+			} else if len(decisions) > 0 {
+				s.mu.Lock()
+				s.mpcDecisions = decisions
+				s.mu.Unlock()
+				s.logger.Printf("Loaded %d MPC decisions from database on startup", len(decisions))
+			}
 		}
 	}
 

@@ -72,11 +72,19 @@ func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) {
 		return
 	}
 
-	// Step 5: Save optimization results
+	// Step 5: Save optimization results to memory
 	s.mu.Lock()
 	s.mpcDecisions = decisions
 	s.lastExecutedDecision = nil // Clear last executed decision for new optimization
 	s.mu.Unlock()
+
+	// Step 5.1: Persist decisions to database (only when not in dry run mode)
+	if !config.DryRun {
+		if err := s.saveMPCDecisions(ctx, decisions); err != nil {
+			s.logger.Printf("Warning: Failed to save MPC decisions to database: %v", err)
+			// Continue execution even if persistence fails
+		}
+	}
 
 	// Log summary
 	s.logger.Printf("MPC optimization completed with %d decisions", len(decisions))
