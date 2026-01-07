@@ -57,8 +57,8 @@ func DownloadPublicationMarketData(ctx context.Context, securityToken string, ur
 		return nil, err
 	}
 
-	// If current time is >= 13:00, also download data for the next day
-	if now.Hour() >= 13 {
+	// If current time is >= 14:00, also download data for the next day
+	if now.Hour() >= 14 {
 		tomorrow := now.AddDate(0, 0, 1)
 		urlNextDay := buildPublicationMarketDataURL(securityToken, urlFormat, tomorrow)
 

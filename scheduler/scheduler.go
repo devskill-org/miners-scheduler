@@ -81,8 +81,8 @@ type MinerScheduler struct {
 	weatherCache WeatherForecastCache
 
 	// MPC optimization results
-	mpcDecisions          []mpc.ControlDecision
-	lastMPCExecutionError error // Tracks if last MPC execution failed
+	mpcDecisions         []mpc.ControlDecision
+	lastExecutedDecision *mpc.ControlDecision // Tracks the last successfully executed decision
 
 	// Web server
 	webServer *WebServer

@@ -50,10 +50,10 @@ func (s *MinerScheduler) GetMarketData(ctx context.Context) (*entsoe.Publication
 	}
 
 	// Calculate next expiry time at 13:00
-	nextExpiry := time.Date(now.Year(), now.Month(), now.Day(), 13, 0, 0, 0, location)
+	nextExpiry := time.Date(now.Year(), now.Month(), now.Day(), 14, 0, 0, 0, location)
 
-	// If it's already past 13:00 today, set expiry to 13:00 tomorrow
-	if now.Hour() >= 13 {
+	// If it's already past 14:00 today, set expiry to 14:00 tomorrow
+	if now.Hour() >= 14 {
 		nextExpiry = nextExpiry.Add(24 * time.Hour)
 	}
 
