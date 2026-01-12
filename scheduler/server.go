@@ -27,17 +27,17 @@ type WebServer struct {
 
 // StatusResponse represents the health check response
 type StatusResponse struct {
-	Status    string          `json:"status"`
-	Timestamp string          `json:"timestamp"`
-	Version   string          `json:"version,omitempty"`
-	Scheduler SchedulerHealth `json:"scheduler"`
-	System    SystemHealth    `json:"system"`
-	EMS       EMSHealth       `json:"ems"`
-	Sun       SunInfo         `json:"sun"`
+	Status    string       `json:"status"`
+	Timestamp string       `json:"timestamp"`
+	Version   string       `json:"version,omitempty"`
+	Scheduler Health       `json:"scheduler"`
+	System    SystemHealth `json:"system"`
+	EMS       EMSHealth    `json:"ems"`
+	Sun       SunInfo      `json:"sun"`
 }
 
-// SchedulerHealth represents scheduler-specific health information
-type SchedulerHealth struct {
+// Health represents scheduler-specific health information
+type Health struct {
 	IsRunning          bool              `json:"is_running"`
 	MinersCount        int               `json:"miners_count"`
 	LastCheck          *time.Time        `json:"last_check,omitempty"`
@@ -118,7 +118,7 @@ func NewWebServer(scheduler *MinerScheduler, port int) *WebServer {
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
-			CheckOrigin: func(r *http.Request) bool {
+			CheckOrigin: func(_ *http.Request) bool {
 				return true // Allow all origins in development
 			},
 		},
@@ -178,7 +178,7 @@ func (hs *WebServer) Stop(ctx context.Context) error {
 	close(hs.done)
 
 	// Close all WebSocket connections
-	hs.clients.Range(func(key, value any) bool {
+	hs.clients.Range(func(key, _ any) bool {
 		if conn, ok := key.(*websocket.Conn); ok {
 			conn.Close() //nolint:gosec
 		}
@@ -223,7 +223,7 @@ func (hs *WebServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 		Status:    "healthy",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Version:   "1.0.0",
-		Scheduler: SchedulerHealth{
+		Scheduler: Health{
 			IsRunning:     status.IsRunning,
 			MinersCount:   status.MinersCount,
 			HasMarketData: status.HasMarketData,
@@ -361,7 +361,7 @@ func (hs *WebServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	hs.clients.Store(conn, true)
 
 	clientCount := 0
-	hs.clients.Range(func(key, value any) bool {
+	hs.clients.Range(func(_, _ any) bool {
 		clientCount++
 		return true
 	})
@@ -376,7 +376,7 @@ func (hs *WebServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		conn.Close() //nolint:gosec
 
 		clientCount := 0
-		hs.clients.Range(func(key, value any) bool {
+		hs.clients.Range(func(_, _ any) bool {
 			clientCount++
 			return true
 		})
@@ -400,7 +400,7 @@ func (hs *WebServer) handleBroadcasts() {
 	for {
 		select {
 		case message := <-hs.broadcast:
-			hs.clients.Range(func(key, value any) bool {
+			hs.clients.Range(func(key, _ any) bool {
 				conn, ok := key.(*websocket.Conn)
 				if !ok {
 					return true
@@ -429,7 +429,7 @@ func (hs *WebServer) broadcastStatus() {
 		select {
 		case <-ticker.C:
 			hasClients := false
-			hs.clients.Range(func(key, value any) bool {
+			hs.clients.Range(func(_, _ any) bool {
 				hasClients = true
 				return false // Stop after finding first client
 			})
@@ -519,7 +519,7 @@ func (hs *WebServer) buildStatusData() map[string]any {
 		Status:    overallStatus,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Version:   "1.0.0",
-		Scheduler: SchedulerHealth{
+		Scheduler: Health{
 			IsRunning:     status.IsRunning,
 			MinersCount:   status.MinersCount,
 			HasMarketData: status.HasMarketData,

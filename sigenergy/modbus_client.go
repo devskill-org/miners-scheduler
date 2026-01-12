@@ -23,9 +23,7 @@ type SigenModbusClient struct {
 	tcpHandler *modbus.TCPClientHandler
 }
 
-// NewSigenModbusClient creates a new Sigenergy Modbus client
-// For TCP: use NewTCPClient
-// For RTU: use NewRTUClient
+// NewRTUClient creates a new Sigenergy Modbus RTU client
 func NewRTUClient(device string, baudRate int, slaveID byte) (*SigenModbusClient, error) {
 	handler := modbus.NewRTUClientHandler(device)
 	handler.BaudRate = baudRate
@@ -46,6 +44,7 @@ func NewRTUClient(device string, baudRate int, slaveID byte) (*SigenModbusClient
 	}, nil
 }
 
+// NewTCPClient creates a new Sigenergy Modbus TCP client
 func NewTCPClient(address string, slaveID byte) (*SigenModbusClient, error) {
 	handler := modbus.NewTCPClientHandler(address)
 	handler.SlaveId = slaveID
@@ -117,7 +116,7 @@ func s32ToBytes(val int32) []byte {
 	return buf
 }
 
-// Plant Running Information Structures (Section 5.1)
+// PlantRunningInfo represents the plant running information (Section 5.1)
 type PlantRunningInfo struct {
 	SystemTime                      uint32  // Epoch seconds
 	SystemTimeZone                  int16   // minutes
@@ -221,7 +220,7 @@ func (c *SigenModbusClient) ReadPlantRunningInfo() (*PlantRunningInfo, error) {
 	return info, nil
 }
 
-// Plant Parameter Settings (Section 5.2)
+// PlantParameters represents the plant parameter settings (Section 5.2)
 type PlantParameters struct {
 	ActivePowerFixedTarget   float64 // kW
 	ReactivePowerFixedTarget float64 // kVar
@@ -332,7 +331,7 @@ func (c *SigenModbusClient) SetPVMaxPowerLimit(powerKW float64) error {
 	return err
 }
 
-// Hybrid Inverter Running Information (Section 5.3)
+// HybridInverterInfo represents the hybrid inverter running information (Section 5.3)
 type HybridInverterInfo struct {
 	ModelType                 string
 	SerialNumber              string
@@ -348,8 +347,8 @@ type HybridInverterInfo struct {
 	ActivePower               float64 // kW
 	ReactivePower             float64 // kVar
 	ESSChargeOrDischargePower float64 // kW
-	ESS_SOC                   float64 // %
-	ESS_SOH                   float64 // %
+	ESSSOC                    float64 // %
+	ESSSOH                    float64 // %
 	ESSAvgCellTemperature     float64 // °C
 	ESSAvgCellVoltage         float64 // V
 	Alarm1                    uint16
@@ -406,8 +405,8 @@ func (c *SigenModbusClient) ReadHybridInverterInfo(slaveID byte) (*HybridInverte
 	info.ActivePower = float64(bytesToS32(data2[18:22])) / 1000.0
 	info.ReactivePower = float64(bytesToS32(data2[22:26])) / 1000.0
 	info.ESSChargeOrDischargePower = float64(bytesToS32(data2[42:46])) / 1000.0
-	info.ESS_SOC = float64(bytesToU16(data2[46:48])) / 10.0
-	info.ESS_SOH = float64(bytesToU16(data2[48:50])) / 10.0
+	info.ESSSOC = float64(bytesToU16(data2[46:48])) / 10.0
+	info.ESSSOH = float64(bytesToU16(data2[48:50])) / 10.0
 	info.ESSAvgCellTemperature = float64(bytesToS16(data2[50:52])) / 10.0
 	info.ESSAvgCellVoltage = float64(bytesToU16(data2[52:54])) / 1000.0
 	info.Alarm1 = bytesToU16(data2[54:56])
@@ -460,7 +459,7 @@ func (c *SigenModbusClient) StopInverter(slaveID byte) error {
 	return err
 }
 
-// AC-Charger Information (Section 5.5)
+// ACChargerInfo represents the AC-Charger information (Section 5.5)
 type ACChargerInfo struct {
 	SystemState              uint16  // System state according to IEC61851-1
 	TotalEnergyConsumed      float64 // kWh

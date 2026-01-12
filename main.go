@@ -1,3 +1,4 @@
+// Package main provides the Energy Management System (EMS) entry point and CLI interface.
 package main
 
 import (

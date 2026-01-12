@@ -45,7 +45,7 @@ func (s *MinerScheduler) GetMarketData(ctx context.Context) (*entsoe.Publication
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	newDoc, err := entsoe.DownloadPublicationMarketData(ctx, s.config.SecurityToken, s.config.UrlFormat, location)
+	newDoc, err := entsoe.DownloadPublicationMarketData(ctx, s.config.SecurityToken, s.config.URLFormat, location)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download PublicationMarketData: %w", err)
 	}

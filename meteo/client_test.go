@@ -279,7 +279,7 @@ func TestGetCompact(t *testing.T) {
 
 func TestAPIError(t *testing.T) {
 	// Create test server that returns an error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Bad Request: Invalid parameters"))
 	}))

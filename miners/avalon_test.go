@@ -209,8 +209,8 @@ func TestAvalonQLiteStatParsing(t *testing.T) {
 	}
 
 	// Test communication error
-	if stats.PCOMM_E != 0 {
-		t.Errorf("Expected PCOMM_E 0, got %d", stats.PCOMM_E)
+	if stats.PCommE != 0 {
+		t.Errorf("Expected PCommE 0, got %d", stats.PCommE)
 	}
 
 	// Test hash rate fields

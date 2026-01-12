@@ -254,7 +254,7 @@ func TestCalculateProfit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mpc := &MPCController{
+			mpc := &Controller{
 				Config: tt.config,
 			}
 
@@ -286,7 +286,7 @@ func TestCalculateProfitNoDegradation(t *testing.T) {
 		BatteryDegradationCost: 0.0, // No degradation
 	}
 
-	mpc := &MPCController{
+	mpc := &Controller{
 		Config: config,
 	}
 
@@ -326,7 +326,7 @@ func TestCalculateProfitArbitrage(t *testing.T) {
 		BatteryDegradationCost: 0.01,
 	}
 
-	mpc := &MPCController{
+	mpc := &Controller{
 		Config: config,
 	}
 
@@ -458,7 +458,7 @@ func TestOptimize(t *testing.T) {
 	}
 
 	// Create MPC controller with 25% initial SOC
-	mpc := NewMPCController(config, len(hourlyPrices), 0.25)
+	mpc := NewController(config, len(hourlyPrices), 0.25)
 
 	// Run optimization
 	decisions := mpc.Optimize(forecast)
@@ -666,7 +666,7 @@ func TestOptimizeEmptyForecast(t *testing.T) {
 		BatteryEfficiency:   0.9,
 	}
 
-	mpc := NewMPCController(config, 24, 0.5)
+	mpc := NewController(config, 24, 0.5)
 	decisions := mpc.Optimize([]TimeSlot{})
 
 	if decisions != nil {
@@ -707,7 +707,7 @@ func TestOptimizeShortHorizon(t *testing.T) {
 		},
 	}
 
-	mpc := NewMPCController(config, 2, 0.5)
+	mpc := NewController(config, 2, 0.5)
 	decisions := mpc.Optimize(forecast)
 
 	if len(decisions) != 2 {
@@ -745,7 +745,7 @@ func TestOptimizeHighLoad(t *testing.T) {
 		},
 	}
 
-	mpc := NewMPCController(config, 1, 0.9) // Start at high SOC
+	mpc := NewController(config, 1, 0.9) // Start at high SOC
 	decisions := mpc.Optimize(forecast)
 
 	if len(decisions) != 1 {
@@ -785,7 +785,7 @@ func TestOptimizeHighSolar(t *testing.T) {
 		},
 	}
 
-	mpc := NewMPCController(config, 1, 0.1) // Start at low SOC
+	mpc := NewController(config, 1, 0.1) // Start at low SOC
 	decisions := mpc.Optimize(forecast)
 
 	if len(decisions) != 1 {

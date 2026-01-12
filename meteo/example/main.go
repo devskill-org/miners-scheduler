@@ -1,3 +1,4 @@
+// Package main provides an example of using the meteo client to fetch weather forecasts.
 package main
 
 import (

@@ -1,3 +1,4 @@
+// Package mpc provides Model Predictive Control optimization for energy management systems.
 package mpc
 
 import (
@@ -48,16 +49,16 @@ type ControlDecision struct {
 	WeatherSymbol string  // weather condition symbol
 }
 
-// MPCController implements Model Predictive Control
-type MPCController struct {
+// Controller implements Model Predictive Control
+type Controller struct {
 	Config     SystemConfig
 	Horizon    int // hours to look ahead
 	CurrentSOC float64
 }
 
-// NewMPCController creates a new MPC controller
-func NewMPCController(config SystemConfig, horizon int, initialSOC float64) *MPCController {
-	return &MPCController{
+// NewController creates a new MPC controller
+func NewController(config SystemConfig, horizon int, initialSOC float64) *Controller {
+	return &Controller{
 		Config:     config,
 		Horizon:    horizon,
 		CurrentSOC: initialSOC,
@@ -65,7 +66,7 @@ func NewMPCController(config SystemConfig, horizon int, initialSOC float64) *MPC
 }
 
 // Optimize finds the optimal control strategy using dynamic programming
-func (mpc *MPCController) Optimize(forecast []TimeSlot) []ControlDecision {
+func (mpc *Controller) Optimize(forecast []TimeSlot) []ControlDecision {
 	if len(forecast) == 0 {
 		return nil
 	}
@@ -162,7 +163,7 @@ func (mpc *MPCController) Optimize(forecast []TimeSlot) []ControlDecision {
 }
 
 // generateFeasibleDecisions creates a set of feasible control decisions
-func (mpc *MPCController) generateFeasibleDecisions(currentSOC float64, slot TimeSlot) []ControlDecision {
+func (mpc *Controller) generateFeasibleDecisions(currentSOC float64, slot TimeSlot) []ControlDecision {
 	decisions := []ControlDecision{}
 
 	// Always include idle option
@@ -241,7 +242,7 @@ func (mpc *MPCController) generateFeasibleDecisions(currentSOC float64, slot Tim
 // The power balance equation ensures: Solar + GridImport + BatteryDischarge*eff = Load + GridExport + BatteryCharge/eff
 // Therefore, GridImport and GridExport already reflect the effect of battery operations.
 // Profit is simply: revenue from exports - cost of imports - degradation cost
-func (mpc *MPCController) calculateProfit(dec ControlDecision, slot TimeSlot) float64 {
+func (mpc *Controller) calculateProfit(dec ControlDecision, slot TimeSlot) float64 {
 	// Revenue from exporting to grid
 	revenue := dec.GridExport * slot.ExportPrice
 
@@ -267,32 +268,32 @@ func (mpc *MPCController) calculateProfit(dec ControlDecision, slot TimeSlot) fl
 }
 
 // Helper functions
-func (mpc *MPCController) canCharge(soc, charge float64) bool {
+func (mpc *Controller) canCharge(soc, charge float64) bool {
 	newSOC := soc + (charge / mpc.Config.BatteryCapacity)
 	return newSOC <= mpc.Config.BatteryMaxSOC
 }
 
-func (mpc *MPCController) canDischarge(soc, discharge float64) bool {
+func (mpc *Controller) canDischarge(soc, discharge float64) bool {
 	newSOC := soc - (discharge / mpc.Config.BatteryCapacity)
 	return newSOC >= mpc.Config.BatteryMinSOC
 }
 
-func (mpc *MPCController) calculateNewSOC(currentSOC, charge, discharge float64) float64 {
+func (mpc *Controller) calculateNewSOC(currentSOC, charge, discharge float64) float64 {
 	chargeEnergy := charge * mpc.Config.BatteryEfficiency
 	socChange := (chargeEnergy - discharge) / mpc.Config.BatteryCapacity
 	newSOC := currentSOC + socChange
 	return math.Max(mpc.Config.BatteryMinSOC, math.Min(mpc.Config.BatteryMaxSOC, newSOC))
 }
 
-func (mpc *MPCController) socToIndex(soc float64, socStep float64) int {
+func (mpc *Controller) socToIndex(soc float64, socStep float64) int {
 	return int(math.Round((soc - mpc.Config.BatteryMinSOC) / socStep))
 }
 
-func (mpc *MPCController) indexToSOC(index int, socStep float64) float64 {
+func (mpc *Controller) indexToSOC(index int, socStep float64) float64 {
 	return mpc.Config.BatteryMinSOC + float64(index)*socStep
 }
 
-func (mpc *MPCController) isFeasible(dec ControlDecision) bool {
+func (mpc *Controller) isFeasible(dec ControlDecision) bool {
 	// Check all constraints are satisfied
 	if dec.BatteryCharge > mpc.Config.BatteryMaxCharge {
 		return false
@@ -310,7 +311,7 @@ func (mpc *MPCController) isFeasible(dec ControlDecision) bool {
 }
 
 // ExecuteControl applies the first decision and returns it
-func (mpc *MPCController) ExecuteControl(forecast []TimeSlot) *ControlDecision {
+func (mpc *Controller) ExecuteControl(forecast []TimeSlot) *ControlDecision {
 	decisions := mpc.Optimize(forecast)
 	if len(decisions) == 0 {
 		return nil

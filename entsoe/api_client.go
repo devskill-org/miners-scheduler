@@ -1,3 +1,4 @@
+// Package entsoe provides a client for the ENTSO-E Transparency Platform API.
 package entsoe
 
 import (
@@ -37,12 +38,13 @@ func (c *APIClient) DownloadPublicationMarketData(ctx context.Context, apiURL st
 	return DownloadPublicationMarketDataWithOptions(ctx, apiURL, opts)
 }
 
-// DownloadPublicationMarketDataWithOptions downloads and decodes a PublicationMarketData with additional options
+// DownloadOptions contains options for downloading publication market data with additional options.
 type DownloadOptions struct {
 	UserAgent string
 	Headers   map[string]string
 }
 
+// DownloadPublicationMarketData downloads and decodes publication market data for the current and next day if needed.
 func DownloadPublicationMarketData(ctx context.Context, securityToken string, urlFormat string, location *time.Location) (*PublicationMarketData, error) {
 
 	now := time.Now().In(location)

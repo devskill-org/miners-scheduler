@@ -16,7 +16,7 @@ import (
 
 // mockEnergyPricesServer creates a mock HTTP server that returns valid energy prices XML
 func mockEnergyPricesServer() *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Return a valid XML response with prices
 		now := time.Now()
 		hourStart := now.Truncate(time.Hour)
@@ -77,7 +77,7 @@ func mockEnergyPricesServer() *httptest.Server {
 }
 
 // mockMinerDiscovery returns an empty list of miners to avoid real network requests
-func mockMinerDiscovery(ctx context.Context, network string) []*miners.AvalonQHost {
+func mockMinerDiscovery(_ context.Context, _ string) []*miners.AvalonQHost {
 	return []*miners.AvalonQHost{}
 }
 
@@ -106,7 +106,7 @@ func testConfigWithServer(server *httptest.Server) *Config {
 		MPCExecutionInterval:     time.Minute,
 		Location:                 "Europe/Riga",
 		SecurityToken:            "test-token",
-		UrlFormat:                urlFormat,
+		URLFormat:                urlFormat,
 	}
 }
 
@@ -705,7 +705,7 @@ func TestMockMinerDiscovery(t *testing.T) {
 
 	// Create a custom mock that tracks if it was called
 	mockCalled := false
-	customMock := func(ctx context.Context, network string) []*miners.AvalonQHost {
+	customMock := func(_ context.Context, _ string) []*miners.AvalonQHost {
 		mockCalled = true
 		// Return some test miners
 		return []*miners.AvalonQHost{
