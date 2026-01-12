@@ -1,3 +1,4 @@
+// Package miners provides functionality for discovering and controlling cryptocurrency miners.
 package miners
 
 import (
@@ -15,9 +16,13 @@ import (
 	"time"
 )
 
+// Sender is a function type for sending data over a network connection.
 type Sender func(conn net.Conn) error
+
+// Receiver is a generic function type for receiving data over a network connection.
 type Receiver[T any] func(conn net.Conn) (T, error)
 
+// UnmarshalJSON implements custom JSON unmarshaling for StatsItem.
 func (s *StatsItem) UnmarshalJSON(data []byte) error {
 	var raw map[string]string
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -196,7 +201,7 @@ func (s *StatsItem) UnmarshalJSON(data []byte) error {
 			}
 		case "PCOMM_E":
 			if i, err := strconv.Atoi(value); err == nil {
-				stats.PCOMM_E = i
+				stats.PCommE = i
 			}
 		case "GHSspd":
 			if f, err := strconv.ParseFloat(value, 64); err == nil {
@@ -315,6 +320,7 @@ func (s *StatsItem) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Discover searches for Avalon miners on the specified network and returns a list of discovered hosts.
 func Discover(ctx context.Context, network string) []*AvalonQHost {
 	hosts := make([]*AvalonQHost, 0)
 	var wg sync.WaitGroup
@@ -351,6 +357,7 @@ func getAddresses(network string) iter.Seq[netip.Addr] {
 	}
 }
 
+// Standby puts the Avalon miner into standby mode.
 func (h *AvalonQHost) Standby(ctx context.Context) (string, error) {
 	if _, err := h.SetWorkMode(ctx, AvalonEcoMode, true); err != nil {
 		return "", err
@@ -364,6 +371,7 @@ func (h *AvalonQHost) Standby(ctx context.Context) (string, error) {
 	)
 }
 
+// SetWorkMode sets the work mode of the Avalon miner.
 func (h *AvalonQHost) SetWorkMode(ctx context.Context, mode AvalonWorkMode, resetHistory bool) (string, error) {
 	if resetHistory {
 		h.ResetLiteStats()
@@ -377,6 +385,7 @@ func (h *AvalonQHost) SetWorkMode(ctx context.Context, mode AvalonWorkMode, rese
 	)
 }
 
+// WakeUp wakes up the Avalon miner from standby mode.
 func (h *AvalonQHost) WakeUp(ctx context.Context) (string, error) {
 	h.ResetLiteStats()
 	return send(ctx, h.Address, h.Port,
@@ -388,6 +397,7 @@ func (h *AvalonQHost) WakeUp(ctx context.Context) (string, error) {
 	)
 }
 
+// RefreshLiteStats refreshes the lite statistics for the Avalon miner.
 func (h *AvalonQHost) RefreshLiteStats(ctx context.Context) {
 	stats, err := send(ctx, h.Address, h.Port,
 		func(conn net.Conn) error {
@@ -395,7 +405,7 @@ func (h *AvalonQHost) RefreshLiteStats(ctx context.Context) {
 		},
 		func(conn net.Conn) (*AvalonQLiteStats, error) {
 			stats := &AvalonQLiteStats{}
-			if err := readJsonResponse(conn, stats); err != nil {
+			if err := readJSONResponse(conn, stats); err != nil {
 				return nil, err
 			}
 			return stats, nil
@@ -417,7 +427,7 @@ func version(ctx context.Context, address string, port int) (*AvalonQVersion, er
 		},
 		func(conn net.Conn) (*AvalonQVersion, error) {
 			v := &AvalonQVersion{}
-			if err := readJsonResponse(conn, v); err != nil {
+			if err := readJSONResponse(conn, v); err != nil {
 				return nil, err
 			}
 			return v, nil
@@ -465,7 +475,7 @@ func readStringResponse(conn net.Conn) (string, error) {
 	return string(r), nil
 }
 
-func readJsonResponse(conn net.Conn, response any) error {
+func readJSONResponse(conn net.Conn, response any) error {
 	dec := json.NewDecoder(conn)
 	return dec.Decode(response)
 }

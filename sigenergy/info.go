@@ -1,3 +1,4 @@
+// Package sigenergy provides Modbus client functionality for Sigenergy inverter systems.
 package sigenergy
 
 import (

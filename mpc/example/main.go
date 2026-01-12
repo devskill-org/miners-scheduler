@@ -1,3 +1,4 @@
+// Package main provides an example of using the MPC (Model Predictive Control) optimization.
 package main
 
 import (
@@ -24,7 +25,7 @@ func main() {
 	}
 
 	// Create MPC controller with 24-hour horizon
-	mpcController := mpc.NewMPCController(config, 24, 0.5) // Start at 50% SOC
+	mpcController := mpc.NewController(config, 24, 0.5) // Start at 50% SOC
 
 	// Create 24-hour forecast
 	forecast := make([]mpc.TimeSlot, 24)

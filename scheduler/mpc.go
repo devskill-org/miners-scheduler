@@ -63,7 +63,7 @@ func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) {
 	}
 
 	horizon := len(forecast)
-	controller := mpc.NewMPCController(systemConfig, horizon, initialSOC)
+	controller := mpc.NewController(systemConfig, horizon, initialSOC)
 
 	// Step 4: Run optimization
 	decisions := controller.Optimize(forecast)

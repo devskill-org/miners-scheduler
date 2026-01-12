@@ -9,6 +9,7 @@ import (
 	"github.com/devskill-org/ems/sigenergy"
 )
 
+// WeatherForecastCache caches weather forecast data with expiration.
 type WeatherForecastCache struct {
 	mu            sync.RWMutex
 	forecast      *meteo.METJSONForecast
@@ -16,6 +17,7 @@ type WeatherForecastCache struct {
 	cacheDuration time.Duration
 }
 
+// Get retrieves the cached weather forecast if it's still valid.
 func (w *WeatherForecastCache) Get() (*meteo.METJSONForecast, bool) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -31,6 +33,7 @@ func (w *WeatherForecastCache) Get() (*meteo.METJSONForecast, bool) {
 	return w.forecast, true
 }
 
+// Set updates the cached weather forecast with a new value.
 func (w *WeatherForecastCache) Set(forecast *meteo.METJSONForecast) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -39,6 +42,7 @@ func (w *WeatherForecastCache) Set(forecast *meteo.METJSONForecast) {
 	w.fetchedAt = time.Now()
 }
 
+// DataSample represents a single measurement of power and battery data.
 type DataSample struct {
 	pvPower      float64
 	gridPower    float64 // positive = import, negative = export
@@ -48,11 +52,13 @@ type DataSample struct {
 	ts           time.Time
 }
 
+// DataSamples is a thread-safe collection of power measurement samples.
 type DataSamples struct {
 	mu      sync.Mutex
 	samples []DataSample
 }
 
+// AddSample adds a new power measurement sample to the collection.
 func (d *DataSamples) AddSample(pvPower, gridPower, batteryPower, evdcPower, batterySoc float64, ts time.Time) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -66,6 +72,7 @@ func (d *DataSamples) AddSample(pvPower, gridPower, batteryPower, evdcPower, bat
 	})
 }
 
+// IntegratedData represents aggregated power measurements over a period.
 type IntegratedData struct {
 	pvTotalPower          float64
 	gridExportPower       float64
@@ -77,6 +84,7 @@ type IntegratedData struct {
 	batterySoc            float64
 }
 
+// IntegrateSamples computes integrated power values from collected samples.
 func (d *DataSamples) IntegrateSamples(pollInterval time.Duration) IntegratedData {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -117,6 +125,7 @@ func (d *DataSamples) IntegrateSamples(pollInterval time.Duration) IntegratedDat
 	return result
 }
 
+// IsEmpty returns true if there are no samples collected.
 func (d *DataSamples) IsEmpty() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()

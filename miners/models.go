@@ -6,12 +6,14 @@ type AvalonState int
 // AvalonWorkMode represents the work mode of an Avalon miner
 type AvalonWorkMode int
 
+// Avalon miner state constants
 const (
 	AvalonStateRunning AvalonState = 0 // Running
 	AvalonStateMining  AvalonState = 1 // Mining
 	AvalonStateStandBy AvalonState = 2 // StandBy
 )
 
+// Avalon miner work mode constants
 const (
 	AvalonEcoMode      AvalonWorkMode = 0 // Eco
 	AvalonStandardMode AvalonWorkMode = 1 // Standard
@@ -56,10 +58,12 @@ func (w AvalonWorkMode) String() string {
 	}
 }
 
+// AvalonQCommand represents a command to send to an Avalon miner.
 type AvalonQCommand struct {
 	Command string `json:"command"`
 }
 
+// AvalonQHost represents an Avalon miner host with its connection details and statistics.
 type AvalonQHost struct {
 	Address          string
 	Port             int
@@ -89,12 +93,14 @@ func (h *AvalonQHost) ResetLiteStats() {
 	}
 }
 
+// AvalonQVersion represents version information from an Avalon miner.
 type AvalonQVersion struct {
 	Status  []StatusItem  `json:"STATUS"`
 	Version []VersionItem `json:"VERSION"`
 	ID      int           `json:"id"`
 }
 
+// StatusItem represents a status response item from an Avalon miner.
 type StatusItem struct {
 	Status      string `json:"STATUS"`
 	When        int64  `json:"When"`
@@ -103,6 +109,7 @@ type StatusItem struct {
 	Description string `json:"Description"`
 }
 
+// VersionItem represents version details from an Avalon miner.
 type VersionItem struct {
 	CGMiner       string `json:"CGMiner"`
 	API           string `json:"API"`
@@ -119,16 +126,19 @@ type VersionItem struct {
 	MAC           string `json:"MAC"`
 }
 
+// AvalonQLiteStats represents lite statistics response from an Avalon miner.
 type AvalonQLiteStats struct {
 	Status []StatusItem `json:"STATUS"`
 	Stats  []StatsItem  `json:"STATS"`
 	ID     int          `json:"id"`
 }
 
+// StatsItem represents a statistics item from an Avalon miner.
 type StatsItem struct {
 	MMIDSummary *AvalonLiteStats `json:"-"`
 }
 
+// AvalonLiteStats represents detailed statistics from an Avalon miner.
 type AvalonLiteStats struct {
 	Ver          string         `json:"ver"`
 	LVer         string         `json:"lver"`
@@ -169,7 +179,7 @@ type AvalonLiteStats struct {
 	FanErr       int            `json:"fan_err"`
 	SoloAllowed  int            `json:"solo_allowed"`
 	PS           []int          `json:"ps"`
-	PCOMM_E      int            `json:"pcomm_e"`
+	PCommE       int            `json:"pcomm_e"`
 	GHSspd       float64        `json:"ghs_spd"`
 	DHspd        string         `json:"dh_spd"`
 	GHSmm        float64        `json:"ghs_mm"`

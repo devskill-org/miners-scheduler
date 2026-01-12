@@ -11,7 +11,7 @@ import (
 	"github.com/devskill-org/ems/entsoe"
 	"github.com/devskill-org/ems/miners"
 	"github.com/devskill-org/ems/mpc"
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
 // PeriodicTask represents a task that runs periodically with an optional initial delay
@@ -65,6 +65,7 @@ func (pt *PeriodicTask) run(ctx context.Context, stopChan <-chan struct{}, logge
 	}
 }
 
+// MinerScheduler manages energy system optimization, miner control, and scheduling tasks.
 type MinerScheduler struct {
 	// Configuration
 	config *Config
@@ -335,11 +336,11 @@ func (s *MinerScheduler) IsRunning() bool {
 }
 
 // GetStatus returns the current status of the scheduler
-func (s *MinerScheduler) GetStatus() SchedulerStatus {
+func (s *MinerScheduler) GetStatus() Status {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return SchedulerStatus{
+	return Status{
 		IsRunning:     s.isRunning,
 		MinersCount:   len(s.discoveredMiners),
 		HasMarketData: s.pricesMarketData != nil,
@@ -361,8 +362,8 @@ func (s *MinerScheduler) GetMPCDecisions() []mpc.ControlDecision {
 	return decisionsCopy
 }
 
-// SchedulerStatus represents the current status of the scheduler
-type SchedulerStatus struct {
+// Status represents the current status of the scheduler
+type Status struct {
 	IsRunning     bool `json:"is_running"`
 	MinersCount   int  `json:"miners_count"`
 	HasMarketData bool `json:"has_latest_document"`

@@ -1,3 +1,4 @@
+// Package main provides an example of using sun calculations for sunrise/sunset times.
 package main
 
 import (

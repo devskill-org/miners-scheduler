@@ -1,3 +1,4 @@
+// Package scheduler provides energy management scheduling and optimization functionality.
 package scheduler
 
 import (
@@ -22,7 +23,7 @@ type Config struct {
 	// API settings
 	SecurityToken string        `json:"security_token"` // ENTSO-E API token
 	APITimeout    time.Duration `json:"api_timeout"`    // Timeout for API calls
-	UrlFormat     string        `json:"url_format"`     // ENTSO-E API URL format string
+	URLFormat     string        `json:"url_format"`     // ENTSO-E API URL format string
 
 	// Logging settings
 	LogLevel  string `json:"log_level"`  // Log level: debug, info, warn, error
@@ -102,7 +103,7 @@ func DefaultConfig() *Config {
 		PVPollInterval:           10 * time.Second,
 		PVIntegrationPeriod:      15 * time.Minute,
 		PostgresConnString:       "",
-		UrlFormat:                "https://web-api.tp.entsoe.eu/api?documentType=A44&out_Domain=10YLV-1001A00074&in_Domain=10YLV-1001A00074&periodStart=%s&periodEnd=%s&securityToken=%s",
+		URLFormat:                "https://web-api.tp.entsoe.eu/api?documentType=A44&out_Domain=10YLV-1001A00074&in_Domain=10YLV-1001A00074&periodStart=%s&periodEnd=%s&securityToken=%s",
 		PlantModbusAddress:       "",
 		Latitude:                 56.9496, // Riga, Latvia
 		Longitude:                24.1052, // Riga, Latvia
@@ -216,7 +217,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("api_timeout must be greater than 0, got: %s", c.APITimeout)
 	}
 
-	if c.UrlFormat == "" {
+	if c.URLFormat == "" {
 		return fmt.Errorf("url_format cannot be empty")
 	}
 
@@ -393,7 +394,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		MPCExecutionInterval     string `json:"mpc_execution_interval"`
 		APITimeout               string `json:"api_timeout"`
 		MinerTimeout             string `json:"miner_timeout"`
-		UrlFormat                string `json:"url_format"`
+		URLFormat                string `json:"url_format"`
 		PVPollInterval           string `json:"pv_poll_interval"`
 		PVIntegrationPeriod      string `json:"pv_integration_period"`
 		WeatherUpdateInterval    string `json:"weather_update_interval"`
@@ -458,8 +459,8 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("invalid pv_integration_period: %w", err)
 		}
 	}
-	if aux.UrlFormat != "" {
-		c.UrlFormat = aux.UrlFormat
+	if aux.URLFormat != "" {
+		c.URLFormat = aux.URLFormat
 	}
 
 	return nil

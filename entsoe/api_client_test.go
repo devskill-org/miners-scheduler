@@ -143,7 +143,7 @@ func TestDownloadPublicationMarketData_EmptyURL(t *testing.T) {
 
 func TestDownloadPublicationMarketData_HTTPError(t *testing.T) {
 	// Create a test server that returns HTTP 500
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Internal Server Error"))
 	}))
@@ -166,7 +166,7 @@ func TestDownloadPublicationMarketData_HTTPError(t *testing.T) {
 
 func TestDownloadPublicationMarketData_InvalidXML(t *testing.T) {
 	// Create a test server that returns invalid XML
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("<invalid><xml></invalid>"))
@@ -190,7 +190,7 @@ func TestDownloadPublicationMarketData_InvalidXML(t *testing.T) {
 
 func TestDownloadPublicationMarketData_ContextCancellation(t *testing.T) {
 	// Create a test server with a delay
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
@@ -410,7 +410,7 @@ func TestDownloadPublicationMarketData_CustomUserAgent(t *testing.T) {
 // Benchmark tests
 func BenchmarkDownloadPublicationMarketData(b *testing.B) {
 	// Create a test server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(sampleXMLResponse))

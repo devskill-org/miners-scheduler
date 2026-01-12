@@ -5,6 +5,7 @@ import "time"
 // WeatherSymbol represents weather condition identifiers
 type WeatherSymbol string
 
+// Weather symbol constants represent different weather conditions.
 const (
 	ClearSkyDay                              WeatherSymbol = "clearsky_day"
 	ClearSkyNight                            WeatherSymbol = "clearsky_night"
