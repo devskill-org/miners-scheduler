@@ -400,7 +400,7 @@ func (h *AvalonQHost) RefreshLiteStats(ctx context.Context) {
 			}
 			return stats, nil
 		})
-	if len(stats.Stats) == 0 || stats.Stats[0].MMIDSummary == nil {
+	if stats == nil || stats.Stats == nil || len(stats.Stats) == 0 || stats.Stats[0].MMIDSummary == nil {
 		err = fmt.Errorf("invalid stats response for miner %s:%d", h.Address, h.Port)
 	}
 	if err != nil {
