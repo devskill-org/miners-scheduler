@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from "react";
+import uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
 import { MPCDecisionInfo } from "../types/api";
 import "../App.css";
 
@@ -15,12 +18,11 @@ const formatTimestamp = (timestamp: number): string => {
     return "Invalid Date";
   }
 
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const hour = date.getHours().toString().padStart(2, "0");
+
+  return `${month}/${day} ${hour}`;
 };
 
 // Helper function to convert weather symbol to emoji
@@ -80,6 +82,340 @@ interface MPCDecisionsProps {
 }
 
 export function MPCDecisions({ decisions }: MPCDecisionsProps) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstanceRef = useRef<uPlot | null>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [showTable, setShowTable] = useState(false);
+
+  useEffect(() => {
+    if (!decisions || decisions.length === 0 || !chartRef.current) {
+      return;
+    }
+
+    // Prepare data for candlestick chart
+    const timestamps = decisions.map((d) => d.timestamp);
+
+    // Convert prices from €/MWh to €/kWh for better visualization
+    const importPrices = decisions.map((d) => d.import_price * 1000);
+    const exportPrices = decisions.map((d) => d.export_price * 1000);
+
+    // Calculate open, high, low, close for candlesticks
+    // Since export price is always lower than import price:
+    // Open = export price (low), Close = import price (high)
+    // High = import price, Low = export price
+    const opens = exportPrices;
+    const closes = importPrices;
+    const highs = importPrices;
+    const lows = exportPrices;
+
+    const data: uPlot.AlignedData = [timestamps, opens, highs, lows, closes];
+
+    const opts: uPlot.Options = {
+      width: chartRef.current.clientWidth,
+      height: 400,
+      title: "Price Trends & MPC Actions",
+      tzDate: (ts) => new Date(ts * 1000),
+      padding: [25, 20, 0, 0],
+      plugins: [
+        {
+          hooks: {
+            setCursor: (u) => {
+              const tooltip = tooltipRef.current;
+              if (!tooltip) return;
+
+              const { left, top, idx } = u.cursor;
+
+              if (idx == null || idx < 0 || idx >= decisions.length) {
+                tooltip.style.display = "none";
+                return;
+              }
+
+              const decision = decisions[idx];
+              const batteryAction = getBatteryAction(decision);
+              const gridAction = getGridAction(decision);
+
+              tooltip.innerHTML = `
+                <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid var(--color-border); padding-bottom: 4px;">
+                  ${formatTimestamp(decision.timestamp)}
+                </div>
+                <div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; font-size: 12px;">
+                  <div style="color: var(--color-text-secondary);">Battery:</div>
+                  <div class="${getActionClass(batteryAction.action)}">
+                    ${batteryAction.power > 0 ? `${batteryAction.power.toFixed(1)} kW` : "Idle"}
+                  </div>
+
+                  <div style="color: var(--color-text-secondary);">Grid:</div>
+                  <div class="${getActionClass(gridAction.action)}">
+                    ${gridAction.power > 0 ? `${gridAction.power.toFixed(1)} kW` : "Idle"}
+                  </div>
+
+                  <div style="color: var(--color-text-secondary);">SOC:</div>
+                  <div>${(decision.battery_soc * 100).toFixed(1)}%</div>
+
+                  <div style="color: var(--color-text-secondary);">Import:</div>
+                  <div>${(decision.import_price * 1000).toFixed(2)} €/MWh</div>
+
+                  <div style="color: var(--color-text-secondary);">Export:</div>
+                  <div>${(decision.export_price * 1000).toFixed(2)} €/MWh</div>
+
+                  <div style="color: var(--color-text-secondary);">Solar:</div>
+                  <div>${decision.solar_forecast.toFixed(1)} kW</div>
+
+                  <div style="color: var(--color-text-secondary);">Load:</div>
+                  <div>${decision.load_forecast.toFixed(1)} kW</div>
+
+                  <div style="color: var(--color-text-secondary);">Cloud:</div>
+                  <div>${decision.cloud_coverage.toFixed(0)}%</div>
+
+                  <div style="color: var(--color-text-secondary);">Weather:</div>
+                  <div>${getWeatherIcon(decision.weather_symbol)}</div>
+
+                  <div style="color: var(--color-text-secondary);">Profit:</div>
+                  <div class="${decision.profit >= 0 ? "value-success" : "value-error"}">
+                    €${decision.profit.toFixed(3)}
+                  </div>
+                </div>
+              `;
+
+              tooltip.style.display = "block";
+
+              // Position tooltip
+              const chartRect = u.root.getBoundingClientRect();
+              const tooltipRect = tooltip.getBoundingClientRect();
+
+              let tooltipLeft = left! + 10;
+              let tooltipTop = top! + 10;
+
+              // Keep tooltip within chart bounds
+              if (tooltipLeft + tooltipRect.width > chartRect.width) {
+                tooltipLeft = left! - tooltipRect.width - 10;
+              }
+
+              if (tooltipTop + tooltipRect.height > chartRect.height) {
+                tooltipTop = chartRect.height - tooltipRect.height - 10;
+              }
+
+              tooltip.style.left = `${tooltipLeft}px`;
+              tooltip.style.top = `${tooltipTop}px`;
+            },
+            draw: (u) => {
+              // Draw candlesticks with battery action colors and grid action indicators
+              const ctx = u.ctx;
+              if (!ctx) return;
+
+              ctx.save();
+
+              const xdata = u.data[0];
+              const open = u.data[1];
+              const high = u.data[2];
+              const low = u.data[3];
+              const close = u.data[4];
+
+              const bodyMaxWidth = 16;
+
+              // Draw candlesticks
+              for (let i = 0; i < decisions.length; i++) {
+                const xVal = xdata[i];
+                const yOpen = open[i];
+                const yHigh = high[i];
+                const yLow = low[i];
+                const yClose = close[i];
+
+                if (
+                  xVal == null ||
+                  yOpen == null ||
+                  yHigh == null ||
+                  yLow == null ||
+                  yClose == null
+                ) {
+                  continue;
+                }
+
+                const x = Math.round(u.valToPos(xVal, "x", true) ?? 0);
+                const yO = Math.round(u.valToPos(yOpen, "y", true) ?? 0);
+                const yH = Math.round(u.valToPos(yHigh, "y", true) ?? 0);
+                const yL = Math.round(u.valToPos(yLow, "y", true) ?? 0);
+                const yC = Math.round(u.valToPos(yClose, "y", true) ?? 0);
+
+                const width = Math.min(
+                  bodyMaxWidth,
+                  Math.max(3, u.bbox.width / xdata.length - 2),
+                );
+
+                // Draw wick (high-low line)
+                ctx.strokeStyle = "#f1f5f9";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, yL);
+                ctx.lineTo(x, yH);
+                ctx.stroke();
+
+                // Draw body with battery action color
+                const bodyTop = Math.min(yO, yC);
+                const bodyHeight = Math.abs(yO - yC);
+
+                const decision = decisions[i];
+                const batteryAction = getBatteryAction(decision);
+
+                if (batteryAction.action === "charge") {
+                  ctx.fillStyle = "#ea580c"; // Orange for charge
+                } else if (batteryAction.action === "discharge") {
+                  ctx.fillStyle = "#16a34a"; // Green for discharge
+                } else {
+                  ctx.fillStyle = "#94a3b8"; // Gray for idle
+                }
+
+                ctx.fillRect(x - width / 2, bodyTop, width, bodyHeight || 1);
+
+                // Draw border
+                ctx.strokeStyle = "#f1f5f9";
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x - width / 2, bodyTop, width, bodyHeight || 1);
+              }
+
+              // Draw grid action indicators
+              ctx.font = "bold 16px sans-serif";
+
+              for (let i = 0; i < decisions.length; i++) {
+                const decision = decisions[i];
+                const gridAction = getGridAction(decision);
+
+                const cx = u.valToPos(decision.timestamp, "x", true);
+                const cy = u.valToPos(highs[i], "y", true);
+
+                if (cx && cy) {
+                  // Draw grid action indicator with bigger arrows
+                  if (gridAction.action === "export") {
+                    ctx.fillStyle = "#16a34a";
+                    ctx.fillText("↑", cx + 6, cy - 10);
+                  } else if (gridAction.action === "import") {
+                    ctx.fillStyle = "#ea580c";
+                    ctx.fillText("↓", cx + 6, cy - 10);
+                  }
+                }
+              }
+
+              ctx.restore();
+            },
+          },
+        },
+      ],
+      scales: {
+        x: {
+          time: true,
+          range: (_u, min, max) => {
+            const timeRange = max - min;
+            const padding = timeRange * 0.02; // 2% padding on each side
+            return [min, max + padding];
+          },
+        },
+        y: {
+          range: (_u, min, max) => {
+            return [min, max + 100];
+          },
+        },
+      },
+      axes: [
+        {
+          stroke: "#94a3b8",
+          grid: {
+            show: true,
+            stroke: "#334155",
+            width: 1,
+          },
+          ticks: {
+            stroke: "#334155",
+          },
+          values: (_u, vals) =>
+            vals.map((v) => {
+              const date = new Date(v * 1000);
+              return date
+                .toLocaleString("en-US", {
+                  month: "numeric",
+                  day: "numeric",
+                  hour: "2-digit",
+                  hour12: false,
+                })
+                .replace(/,/, "");
+            }),
+        },
+        {
+          stroke: "#94a3b8",
+          label: "Price (€/MWh)",
+          labelSize: 30,
+          labelFont: "12px sans-serif",
+          size: 70,
+          gap: 10,
+          grid: {
+            show: true,
+            stroke: "#334155",
+            width: 1,
+          },
+          ticks: {
+            stroke: "#334155",
+          },
+          values: (_u, vals) => vals.map((v) => v.toFixed(2)),
+        },
+      ],
+      series: [
+        {
+          label: "Time",
+        },
+        {
+          label: "Export (Open)",
+          stroke: "#f1f5f9",
+          width: 0,
+          points: { show: false },
+        },
+        {
+          label: "High (Import)",
+          stroke: "#f1f5f9",
+          width: 0,
+          points: { show: false },
+          show: false,
+        },
+        {
+          label: "Low (Export)",
+          stroke: "#f1f5f9",
+          width: 0,
+          points: { show: false },
+          show: false,
+        },
+        {
+          label: "Import (Close)",
+          stroke: "#f1f5f9",
+          width: 0,
+          points: { show: false },
+          show: false,
+        },
+      ],
+      cursor: {
+        points: {
+          show: false,
+        },
+        drag: {
+          x: false,
+          y: false,
+        },
+        sync: {
+          key: "mpc",
+        },
+      },
+      legend: {
+        show: false,
+      },
+    };
+
+    const chart = new uPlot(opts, data, chartRef.current);
+    chartInstanceRef.current = chart;
+
+    // Cleanup
+    return () => {
+      chart.destroy();
+      chartInstanceRef.current = null;
+    };
+  }, [decisions]);
+
   if (!decisions || decisions.length === 0) {
     return (
       <section className="card">
@@ -93,15 +429,6 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
 
   // Calculate total profit
   const totalProfit = decisions.reduce((sum, dec) => sum + dec.profit, 0);
-
-  // Find highest and lowest import/export prices
-  const importPrices = decisions.map((d) => d.import_price);
-  const exportPrices = decisions.map((d) => d.export_price);
-
-  const highestImport = Math.max(...importPrices);
-  const lowestImport = Math.min(...importPrices);
-  const highestExport = Math.max(...exportPrices);
-  const lowestExport = Math.min(...exportPrices);
 
   // Helper function to determine battery action
   const getBatteryAction = (decision: MPCDecisionInfo) => {
@@ -155,103 +482,226 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
         </div>
       </div>
 
-      <div className="mpc-table-container">
-        <table className="mpc-table">
-          <thead>
-            <tr>
-              <th rowSpan={2}>Time</th>
-              <th rowSpan={2}>Battery Action</th>
-              <th rowSpan={2}>Grid Action</th>
-              <th rowSpan={2}>SOC</th>
-              <th
-                colSpan={6}
-                style={{
-                  textAlign: "center",
-                  borderBottom: "1px solid var(--color-border)",
-                  backgroundColor: "rgba(51, 65, 85, 0.5)",
-                }}
-              >
-                Forecast Data
-              </th>
-              <th rowSpan={2}>Profit</th>
-            </tr>
-            <tr>
-              <th>Import (€/MWh)</th>
-              <th>Export (€/MWh)</th>
-              <th>Solar (kW)</th>
-              <th>Load (kW)</th>
-              <th>Cloud (%)</th>
-              <th>Weather</th>
-            </tr>
-          </thead>
-          <tbody>
-            {decisions.map((decision) => {
-              const batteryAction = getBatteryAction(decision);
-              const gridAction = getGridAction(decision);
+      {/* Candlestick Chart */}
+      <div
+        className="mpc-chart-container"
+        style={{ marginBottom: "1.5rem", position: "relative" }}
+      >
+        <div
+          ref={chartRef}
+          style={{
+            backgroundColor: "rgba(30, 41, 59, 0.5)",
+            borderRadius: "6px",
+            padding: "1rem",
+            border: "1px solid var(--color-border)",
+          }}
+        />
+        <div
+          ref={tooltipRef}
+          style={{
+            display: "none",
+            position: "absolute",
+            backgroundColor: "rgba(30, 41, 59, 0.95)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "6px",
+            padding: "8px 12px",
+            pointerEvents: "none",
+            zIndex: 1000,
+            fontSize: "13px",
+            minWidth: "200px",
+            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.3)",
+          }}
+        />
+        <div
+          className="mpc-chart-legend"
+          style={{
+            marginTop: "1rem",
+            padding: "1rem",
+            backgroundColor: "rgba(51, 65, 85, 0.5)",
+            borderRadius: "6px",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "1rem",
+            fontSize: "0.875rem",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <div
+              style={{
+                width: "20px",
+                height: "20px",
+                backgroundColor: "#16a34a",
+                border: "2px solid #f1f5f9",
+                borderRadius: "2px",
+              }}
+            ></div>
+            <span>Battery Discharge</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <div
+              style={{
+                width: "20px",
+                height: "20px",
+                backgroundColor: "#ea580c",
+                border: "2px solid #f1f5f9",
+                borderRadius: "2px",
+              }}
+            ></div>
+            <span>Battery Charge</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <div
+              style={{
+                width: "20px",
+                height: "20px",
+                backgroundColor: "#94a3b8",
+                border: "2px solid #f1f5f9",
+                borderRadius: "2px",
+              }}
+            ></div>
+            <span>Battery Idle</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={{ color: "#16a34a", fontSize: "16px" }}>↑</span>
+            <span>Grid Export</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={{ color: "#ea580c", fontSize: "16px" }}>↓</span>
+            <span>Grid Import</span>
+          </div>
+        </div>
+      </div>
 
-              return (
-                <tr key={decision.hour}>
-                  <td>{formatTimestamp(decision.timestamp)}</td>
-                  <td>
-                    <span className={getActionClass(batteryAction.action)}>
-                      {batteryAction.action}
-                      {batteryAction.power > 0 &&
-                        `: ${batteryAction.power.toFixed(1)} kW`}
-                    </span>
+      <div
+        style={{
+          marginTop: "1rem",
+          marginBottom: "0.5rem",
+          textAlign: "center",
+        }}
+      >
+        <button
+          onClick={() => setShowTable(!showTable)}
+          style={{
+            padding: "0.5rem 1rem",
+            backgroundColor: "var(--color-primary)",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "0.875rem",
+            fontWeight: "600",
+          }}
+        >
+          {showTable ? "Hide Table" : "Show Table"}
+        </button>
+      </div>
+
+      {showTable && (
+        <div className="mpc-table-container">
+          <table className="mpc-table">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                {decisions.map((decision) => (
+                  <th key={decision.hour}>
+                    {formatTimestamp(decision.timestamp)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Battery Action (kW)</th>
+                {decisions.map((decision) => {
+                  const batteryAction = getBatteryAction(decision);
+                  return (
+                    <td key={decision.hour}>
+                      <span className={getActionClass(batteryAction.action)}>
+                        {batteryAction.power > 0
+                          ? batteryAction.power.toFixed(1)
+                          : ""}
+                      </span>
+                    </td>
+                  );
+                })}
+              </tr>
+              <tr>
+                <th>Grid Action (kW)</th>
+                {decisions.map((decision) => {
+                  const gridAction = getGridAction(decision);
+                  return (
+                    <td key={decision.hour}>
+                      <span className={getActionClass(gridAction.action)}>
+                        {gridAction.power > 0
+                          ? gridAction.power.toFixed(1)
+                          : ""}
+                      </span>
+                    </td>
+                  );
+                })}
+              </tr>
+              <tr>
+                <th>SOC (%)</th>
+                {decisions.map((decision) => (
+                  <td key={decision.hour}>
+                    {(decision.battery_soc * 100).toFixed(1)}
                   </td>
-                  <td>
-                    <span className={getActionClass(gridAction.action)}>
-                      {gridAction.action}
-                      {gridAction.power > 0 &&
-                        `: ${gridAction.power.toFixed(1)} kW`}
-                    </span>
+                ))}
+              </tr>
+
+              <tr>
+                <th>Solar (kW)</th>
+                {decisions.map((decision) => (
+                  <td key={decision.hour}>
+                    {decision.solar_forecast.toFixed(1)}
                   </td>
-                  <td>{(decision.battery_soc * 100).toFixed(1)}%</td>
-                  <td>
-                    <span
-                      className={
-                        decision.import_price === highestImport
-                          ? "price-highest"
-                          : decision.import_price === lowestImport
-                            ? "price-lowest"
-                            : ""
-                      }
-                    >
-                      {(decision.import_price * 1000).toFixed(2)}
-                    </span>
+                ))}
+              </tr>
+              <tr>
+                <th>Load (kW)</th>
+                {decisions.map((decision) => (
+                  <td key={decision.hour}>
+                    {decision.load_forecast.toFixed(1)}
                   </td>
-                  <td>
-                    <span
-                      className={
-                        decision.export_price === highestExport
-                          ? "price-highest"
-                          : decision.export_price === lowestExport
-                            ? "price-lowest"
-                            : ""
-                      }
-                    >
-                      {(decision.export_price * 1000).toFixed(2)}
-                    </span>
+                ))}
+              </tr>
+              <tr>
+                <th>Cloud (%)</th>
+                {decisions.map((decision) => (
+                  <td key={decision.hour}>
+                    {decision.cloud_coverage.toFixed(0)}
                   </td>
-                  <td>{decision.solar_forecast.toFixed(1)}</td>
-                  <td>{decision.load_forecast.toFixed(1)}</td>
-                  <td>{decision.cloud_coverage.toFixed(0)}</td>
-                  <td title={decision.weather_symbol || "Unknown"}>
+                ))}
+              </tr>
+              <tr>
+                <th>Weather</th>
+                {decisions.map((decision) => (
+                  <td
+                    key={decision.hour}
+                    title={decision.weather_symbol || "Unknown"}
+                  >
                     {getWeatherIcon(decision.weather_symbol)}
                   </td>
-                  <td
-                    className={
-                      decision.profit >= 0 ? "value-success" : "value-error"
-                    }
-                  >
-                    €{decision.profit.toFixed(3)}
+                ))}
+              </tr>
+              <tr>
+                <th>Profit (€)</th>
+                {decisions.map((decision) => (
+                  <td key={decision.hour}>
+                    <span
+                      className={
+                        decision.profit >= 0 ? "value-success" : "value-error"
+                      }
+                    >
+                      {Math.abs(decision.profit).toFixed(2)}
+                    </span>
                   </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

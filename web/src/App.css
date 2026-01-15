@@ -150,7 +150,7 @@ body {
 .value-success {
     font-weight: 600;
     color: var(--color-success);
-    font-size: 0.875rem;
+    font-size: 0.65rem;
 }
 
 .value-warning {
@@ -162,7 +162,7 @@ body {
 .value-error {
     font-weight: 600;
     color: var(--color-error);
-    font-size: 0.875rem;
+    font-size: 0.65rem;
 }
 
 .miners-list {
@@ -239,7 +239,7 @@ body {
     right: 0;
     bottom: 0;
     background-image: url("../assets/ems.png");
-    background-size: cover;
+    background-size: contain;
     background-position: center;
     background-repeat: no-repeat;
     z-index: 0;
@@ -252,6 +252,8 @@ body {
     justify-content: center;
     align-items: center;
     min-height: 250px;
+    width: 100%;
+    height: 100%;
 }
 
 .pv-power-display {
@@ -392,7 +394,8 @@ body {
 .mpc-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.875rem;
+    font-size: 0.7rem;
+    table-layout: fixed;
 }
 
 .mpc-table thead {
@@ -400,18 +403,29 @@ body {
 }
 
 .mpc-table th {
-    padding: 0.75rem 1rem;
+    padding: 0.4rem 0.5rem;
     text-align: left;
     font-weight: 600;
     color: var(--color-text);
     border-bottom: 2px solid var(--color-border);
     text-transform: uppercase;
-    font-size: 0.75rem;
-    letter-spacing: 0.05em;
+    font-size: 0.65rem;
+    letter-spacing: 0.03em;
+}
+
+.mpc-table th:first-child,
+.mpc-table td:first-child {
+    width: 120px;
+}
+
+.mpc-table th:not(:first-child),
+.mpc-table td:not(:first-child) {
+    width: 25px;
+    text-align: center;
 }
 
 .mpc-table td {
-    padding: 0.75rem 1rem;
+    padding: 0.4rem 0.5rem;
     border-bottom: 1px solid var(--color-border);
     color: var(--color-text);
 }
@@ -428,29 +442,15 @@ body {
     border-bottom: none;
 }
 
-/* Prevent wrapping in forecast and profit columns */
-.mpc-table th:nth-child(5),
-.mpc-table th:nth-child(6),
-.mpc-table th:nth-child(7),
-.mpc-table th:nth-child(8),
-.mpc-table th:nth-child(9),
-.mpc-table td:nth-child(5),
-.mpc-table td:nth-child(6),
-.mpc-table td:nth-child(7),
-.mpc-table td:nth-child(8),
-.mpc-table td:nth-child(9) {
-    white-space: nowrap;
-}
-
 /* Forecast data header styling */
 .mpc-table thead tr:first-child th {
     vertical-align: middle;
 }
 
 .mpc-table thead tr:nth-child(2) th {
-    padding-top: 0.5rem;
-    padding-bottom: 0.75rem;
-    font-size: 0.7rem;
+    padding-top: 0.3rem;
+    padding-bottom: 0.4rem;
+    font-size: 0.6rem;
 }
 
 .action-charge,
@@ -513,19 +513,72 @@ body {
     }
 
     .devices-section {
-        min-height: 200px;
+        min-height: auto;
+        padding: 1rem;
+    }
+
+    .devices-section::before {
+        /* Hide background image on mobile */
+        display: none;
     }
 
     .devices-content {
-        min-height: 150px;
+        min-height: auto;
+        flex-direction: column;
+        gap: 1rem;
+        padding: 0;
+        position: static !important;
     }
 
-    .pv-power-display {
-        padding: 1.5rem 2rem;
+    /* Wrapper for power displays with mobile labels */
+    .devices-content .power-display-wrapper {
+        position: static !important;
+        margin: 0 auto;
+        width: 100%;
+        max-width: 280px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    /* Show label from data attribute on mobile */
+    .devices-content .power-display-wrapper::before {
+        content: attr(data-mobile-label);
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--color-text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.5rem;
+        text-align: center;
+    }
+
+    /* Convert absolute positioned PowerDisplay components to static flow on mobile */
+    .devices-content .power-display-wrapper .pv-power-display {
+        position: static !important;
+        margin: 0 auto;
+        width: 100%;
+        padding: 1rem 1.5rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .devices-content .solar-info {
+        position: static !important;
+        width: 100% !important;
+        max-width: 280px;
+        margin: 0 auto;
     }
 
     .pv-power-value {
-        font-size: 2rem;
+        font-size: 1.5rem;
+    }
+
+    .pv-power-label {
+        font-size: 0.875rem;
+        margin-bottom: 0.5rem;
+        margin-top: 0 !important;
     }
 
     .mpc-summary {
