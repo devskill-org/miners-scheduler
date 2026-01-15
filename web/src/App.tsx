@@ -129,48 +129,81 @@ function App() {
         <section className="card devices-section">
           <h2>Devices</h2>
           <div className="devices-content" style={{ position: "relative" }}>
-            <PowerDisplay
-              value={health?.ems?.current_pv_power}
-              style={{ position: "absolute", top: "202px", right: "170px" }}
-            />
+            <div
+              className="power-display-wrapper"
+              data-mobile-label="Solar Power"
+            >
+              <PowerDisplay
+                value={health?.ems?.current_pv_power}
+                style={{ position: "absolute", top: "202px", right: "170px" }}
+              />
+            </div>
 
-            <PowerDisplay
-              value={health?.ems?.ess_power}
-              invertColors={true}
-              label={
+            <div
+              className="power-display-wrapper"
+              data-mobile-label={
                 health?.ems?.ess_soc !== undefined
-                  ? `${health.ems.ess_soc.toFixed(1)}%`
-                  : "N/A"
+                  ? `Battery (${health.ems.ess_soc.toFixed(1)}%)`
+                  : "Battery"
               }
-              style={{ position: "absolute", top: "643px", right: "622px" }}
-            />
+            >
+              <PowerDisplay
+                value={health?.ems?.ess_power}
+                invertColors={true}
+                label={
+                  health?.ems?.ess_soc !== undefined
+                    ? `${health.ems.ess_soc.toFixed(1)}%`
+                    : "N/A"
+                }
+                style={{ position: "absolute", top: "643px", right: "622px" }}
+              />
+            </div>
 
-            <PowerDisplay
-              value={
-                health?.ems?.grid_sensor_status === 1
-                  ? health?.ems?.grid_sensor_active_power
-                  : undefined
-              }
-              style={{ position: "absolute", top: "556px", left: "220px" }}
-            />
+            <div
+              className="power-display-wrapper"
+              data-mobile-label="Grid Power"
+            >
+              <PowerDisplay
+                value={
+                  health?.ems?.grid_sensor_status === 1
+                    ? health?.ems?.grid_sensor_active_power
+                    : undefined
+                }
+                style={{ position: "absolute", top: "556px", left: "220px" }}
+              />
+            </div>
 
-            <PowerDisplay
-              value={health?.ems?.plant_active_power}
-              label="Active Power"
-              invertColors={true}
-              showLabel={true}
-              style={{ position: "absolute", top: "194px", left: "223px" }}
-            />
+            <div
+              className="power-display-wrapper"
+              data-mobile-label="Plant Active Power"
+            >
+              <PowerDisplay
+                value={health?.ems?.plant_active_power}
+                label="Active Power"
+                invertColors={true}
+                showLabel={true}
+                style={{ position: "absolute", top: "194px", left: "223px" }}
+              />
+            </div>
 
-            <PowerDisplay
-              value={health?.ems?.dc_charger_output_power}
-              label={
+            <div
+              className="power-display-wrapper"
+              data-mobile-label={
                 health?.ems?.dc_charger_vehicle_soc !== undefined
-                  ? `${health.ems.dc_charger_vehicle_soc.toFixed(1)}%`
-                  : "N/A"
+                  ? `EV Charger (${health.ems.dc_charger_vehicle_soc.toFixed(1)}%)`
+                  : "EV Charger"
               }
-              style={{ position: "absolute", top: "428px", right: "162px" }}
-            />
+            >
+              <PowerDisplay
+                value={health?.ems?.dc_charger_output_power}
+                label={
+                  health?.ems?.dc_charger_vehicle_soc !== undefined
+                    ? `${health.ems.dc_charger_vehicle_soc.toFixed(1)}%`
+                    : "N/A"
+                }
+                style={{ position: "absolute", top: "428px", right: "162px" }}
+              />
+            </div>
 
             <SolarInfo
               solarAngle={health?.sun?.solar_angle}
