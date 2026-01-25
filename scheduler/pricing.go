@@ -67,14 +67,14 @@ func (s *MinerScheduler) GetMarketData(ctx context.Context) (*entsoe.Publication
 }
 
 // runPriceCheck executes the main scheduler task
-func (s *MinerScheduler) runPriceCheck(ctx context.Context) {
+func (s *MinerScheduler) runPriceCheck(ctx context.Context) error {
 	s.logger.Printf("Starting price check task at %s", time.Now().Format(time.RFC3339))
 
 	// Step 1: Get current electricity price
 	currentPrice, err := s.getCurrentAvgPrice(ctx)
 	if err != nil {
 		s.logger.Printf("Error getting current price: %v", err)
-		return
+		return err
 	}
 
 	s.logger.Printf("Current hourly average electricity price: %.2f EUR/MWh", currentPrice)
@@ -83,10 +83,11 @@ func (s *MinerScheduler) runPriceCheck(ctx context.Context) {
 	// Step 2: Manage miners based on price
 	if err := s.manageMiners(ctx, currentPrice); err != nil {
 		s.logger.Printf("Error managing miners: %v", err)
-		return
+		return err
 	}
 
 	s.logger.Printf("Price check task completed successfully")
+	return nil
 }
 
 // getCurrentAvgPrice gets the current hourly average electricity price, downloading new data if needed

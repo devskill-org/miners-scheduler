@@ -16,10 +16,12 @@ import (
 
 // PeriodicTask represents a task that runs periodically with an optional initial delay
 type PeriodicTask struct {
-	name         string
-	initialDelay time.Duration
-	interval     time.Duration
-	runFunc      func()
+	name          string
+	initialDelay  time.Duration
+	interval      time.Duration
+	runFunc       func() error
+	retryInterval *time.Duration
+	err           error
 }
 
 // run executes the periodic task in a loop, respecting the initial delay and context cancellation
@@ -31,7 +33,7 @@ func (pt *PeriodicTask) run(ctx context.Context, stopChan <-chan struct{}, logge
 		case <-time.After(pt.initialDelay):
 			// Initial delay passed, run the task
 			logger.Printf("[%s] Initial delay passed, running first iteration", pt.name)
-			pt.runFunc()
+			pt.err = pt.runFunc()
 		case <-ctx.Done():
 			logger.Printf("[%s] Stopped during initial delay due to context cancellation", pt.name)
 			return
@@ -42,19 +44,31 @@ func (pt *PeriodicTask) run(ctx context.Context, stopChan <-chan struct{}, logge
 	} else {
 		// No initial delay, run immediately
 		logger.Printf("[%s] Running immediately (no initial delay)", pt.name)
-		pt.runFunc()
+		pt.err = pt.runFunc()
 	}
 
 	// Create ticker for periodic execution
 	ticker := time.NewTicker(pt.interval)
 	defer ticker.Stop()
 
+	// Default value, but the retry is disabled if the pt.retryInterval is nil
+	retryInterval := time.Hour
+	if pt.retryInterval != nil {
+		retryInterval = *pt.retryInterval
+	}
+	retryTicker := time.NewTicker(retryInterval)
+	defer retryTicker.Stop()
+
 	logger.Printf("[%s] Started with interval: %v", pt.name, pt.interval)
 
 	for {
 		select {
 		case <-ticker.C:
-			pt.runFunc()
+			pt.err = pt.runFunc()
+		case <-retryTicker.C:
+			if pt.retryInterval != nil && pt.err != nil {
+				pt.err = pt.runFunc()
+			}
 		case <-ctx.Done():
 			logger.Printf("[%s] Stopped due to context cancellation", pt.name)
 			return
@@ -223,55 +237,67 @@ func (s *MinerScheduler) Start(ctx context.Context, serverOnly bool) error {
 	stateCheckInitialDelay := s.getInitialDelay(now, config.MinersStateCheckInterval)
 	mpcExecutionInitialDelay := s.getInitialDelay(now, config.MPCExecutionInterval) + 2*time.Second
 
+	taskRetryInterval := time.Minute
+
 	// Create periodic tasks
 	tasks := []PeriodicTask{
 		{
 			name:         "MinerDiscovery",
 			initialDelay: 0, // Run immediately
 			interval:     config.MinerDiscoveryInterval,
-			runFunc: func() {
-				s.RunMinerDiscovery(ctx)
+			runFunc: func() error {
+				return s.RunMinerDiscovery(ctx)
 			},
 		},
 		{
-			name:         "PriceCheckAndMPC",
-			initialDelay: minersControlInitialDelay,
-			interval:     config.CheckPriceInterval,
-			runFunc: func() {
-				s.runPriceCheck(ctx)
-				s.RunMPCOptimize(ctx)
+			name:          "PriceCheck",
+			initialDelay:  minersControlInitialDelay,
+			interval:      config.CheckPriceInterval,
+			retryInterval: &taskRetryInterval,
+			runFunc: func() error {
+				return s.runPriceCheck(ctx)
+			},
+		},
+		{
+			name:          "MPC",
+			initialDelay:  minersControlInitialDelay,
+			interval:      config.CheckPriceInterval,
+			retryInterval: &taskRetryInterval,
+			runFunc: func() error {
+				return s.RunMPCOptimize(ctx)
 			},
 		},
 		{
 			name:         "StateCheck",
 			initialDelay: stateCheckInitialDelay,
 			interval:     config.MinersStateCheckInterval,
-			runFunc: func() {
-				s.runStateCheck(ctx)
+			runFunc: func() error {
+				return s.runStateCheck(ctx)
 			},
 		},
 		{
 			name:         "DataPoll",
 			initialDelay: pvDataInitialDelay,
 			interval:     config.PVPollInterval,
-			runFunc: func() {
-				s.runDataPoll(dataSamples)
+			runFunc: func() error {
+				return s.runDataPoll(dataSamples)
 			},
 		},
 		{
-			name:         "DataIntegration",
-			initialDelay: pvDataInitialDelay,
-			interval:     config.PVIntegrationPeriod,
-			runFunc: func() {
-				s.runDataIntegration(dataSamples, config.PVPollInterval, dataDB, config.DeviceID, config.DryRun)
+			name:          "DataIntegration",
+			initialDelay:  pvDataInitialDelay,
+			interval:      config.PVIntegrationPeriod,
+			retryInterval: &taskRetryInterval,
+			runFunc: func() error {
+				return s.runDataIntegration(dataSamples, config.PVPollInterval, dataDB, config.DeviceID, config.DryRun)
 			},
 		},
 		{
 			name:         "MPCExecution",
 			initialDelay: mpcExecutionInitialDelay,
 			interval:     config.MPCExecutionInterval,
-			runFunc: func() {
-				s.runMPCExecution()
+			runFunc: func() error {
+				return s.runMPCExecution()
 			},
 		},
 	}

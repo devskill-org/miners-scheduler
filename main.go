@@ -108,11 +108,16 @@ func runMPCOptimize(config *scheduler.Config) {
 
 	ctx := context.Background()
 
-	minerScheduler.RunMinerDiscovery(ctx)
+	if err := minerScheduler.RunMinerDiscovery(ctx); err != nil {
+		logger.Printf("Error during miner discovery: %v", err)
+	}
 
 	// Run MPC optimization
 	logger.Printf("Running MPC optimization...")
-	minerScheduler.RunMPCOptimize(ctx)
+	if err := minerScheduler.RunMPCOptimize(ctx); err != nil {
+		logger.Printf("Error during MPC optimization: %v", err)
+		return
+	}
 
 	// Get and log all decisions
 	decisions := minerScheduler.GetMPCDecisions()

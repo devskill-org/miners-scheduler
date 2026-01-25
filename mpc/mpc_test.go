@@ -452,7 +452,7 @@ func TestOptimize(t *testing.T) {
 		BatteryMinSOC:          0.0,  // 0% minimum SOC
 		BatteryMaxSOC:          1.0,  // 100% maximum SOC
 		BatteryEfficiency:      0.9,  // 90% round-trip efficiency
-		BatteryDegradationCost: 0.0,  // €0.00/kWh degradation cost
+		BatteryDegradationCost: 0.0,  // 0.00/kWh degradation cost
 		MaxGridImport:          30.0, // 30 kW max grid import
 		MaxGridExport:          30.0, // 30 kW max grid export
 	}
@@ -474,7 +474,7 @@ func TestOptimize(t *testing.T) {
 
 	// Verify all decisions have valid data
 	for i, dec := range decisions {
-		t.Logf("Hour %2d: SOC=%.3f, Charge=%.3f, Discharge=%.3f, Import=%.3f, Export=%.3f, Profit=€%.4f, Price=€%.5f/kWh",
+		t.Logf("Hour %2d: SOC=%.3f, Charge=%.3f, Discharge=%.3f, Import=%.3f, Export=%.3f, Profit=%.4f, Price=%.5f/kWh",
 			i, dec.BatterySOC, dec.BatteryCharge, dec.BatteryDischarge,
 			dec.GridImport, dec.GridExport, dec.Profit, dec.ImportPrice)
 
@@ -527,7 +527,7 @@ func TestOptimize(t *testing.T) {
 	for _, dec := range decisions {
 		totalProfit += dec.Profit
 	}
-	t.Logf("Total profit over 36 hours: €%.4f", totalProfit)
+	t.Logf("Total profit over 36 hours: %.4f", totalProfit)
 
 	// Detailed arbitrage analysis
 	t.Log("\n=== Arbitrage Analysis ===")
@@ -543,17 +543,17 @@ func TestOptimize(t *testing.T) {
 	exportPriceHour22 := forecast[22].ExportPrice
 
 	t.Logf("\nHour 4 (LOWEST PRICE):")
-	t.Logf("  Import Price: €%.5f/kWh", importPriceHour4)
-	t.Logf("  Export Price: €%.5f/kWh", exportPriceHour4)
+	t.Logf("  Import Price: %.5f/kWh", importPriceHour4)
+	t.Logf("  Export Price: %.5f/kWh", exportPriceHour4)
 	t.Logf("  Charged: %.3f kW (added %.3f kWh to battery)", hour4.BatteryCharge, hour4.BatteryCharge*0.9)
-	t.Logf("  Cost: €%.4f (import + degradation)", hour4.BatteryCharge*importPriceHour4+hour4.BatteryCharge*config.BatteryDegradationCost)
+	t.Logf("  Cost: %.4f (import + degradation)", hour4.BatteryCharge*importPriceHour4+hour4.BatteryCharge*config.BatteryDegradationCost)
 
 	t.Logf("\nHour 22 (HIGHEST PRICE):")
-	t.Logf("  Import Price: €%.5f/kWh", importPriceHour22)
-	t.Logf("  Export Price: €%.5f/kWh", exportPriceHour22)
+	t.Logf("  Import Price: %.5f/kWh", importPriceHour22)
+	t.Logf("  Export Price: %.5f/kWh", exportPriceHour22)
 	t.Logf("  Discharged: %.3f kW (%.3f kWh from battery)", hour22.BatteryDischarge, hour22.BatteryDischarge)
 	t.Logf("  Exported: %.3f kW", hour22.GridExport)
-	t.Logf("  Revenue: €%.4f (export - degradation)", hour22.GridExport*exportPriceHour22-hour22.BatteryDischarge*config.BatteryDegradationCost)
+	t.Logf("  Revenue: %.4f (export - degradation)", hour22.GridExport*exportPriceHour22-hour22.BatteryDischarge*config.BatteryDegradationCost)
 
 	// Calculate theoretical max arbitrage if charged more at hour 4
 	maxAdditionalCharge := config.BatteryMaxCharge - hour4.BatteryCharge
@@ -564,9 +564,9 @@ func TestOptimize(t *testing.T) {
 		t.Logf("\nTheoretical Additional Arbitrage Opportunity:")
 		t.Logf("  Could charge additional: %.3f kW at hour 4", actualMaxCharge)
 		t.Logf("  Energy stored after efficiency: %.3f kWh", actualMaxCharge*config.BatteryEfficiency)
-		t.Logf("  Cost to charge: €%.4f", actualMaxCharge*importPriceHour4+actualMaxCharge*config.BatteryDegradationCost)
-		t.Logf("  Revenue if exported at hour 22: €%.4f", actualMaxCharge*config.BatteryEfficiency*exportPriceHour22-actualMaxCharge*config.BatteryDegradationCost)
-		t.Logf("  Net profit from additional arbitrage: €%.4f",
+		t.Logf("  Cost to charge: %.4f", actualMaxCharge*importPriceHour4+actualMaxCharge*config.BatteryDegradationCost)
+		t.Logf("  Revenue if exported at hour 22: %.4f", actualMaxCharge*config.BatteryEfficiency*exportPriceHour22-actualMaxCharge*config.BatteryDegradationCost)
+		t.Logf("  Net profit from additional arbitrage: %.4f",
 			actualMaxCharge*config.BatteryEfficiency*exportPriceHour22-
 				actualMaxCharge*importPriceHour4-
 				2*actualMaxCharge*config.BatteryDegradationCost)
@@ -579,7 +579,7 @@ func TestOptimize(t *testing.T) {
 	for i, dec := range decisions {
 		if dec.BatteryCharge > 0.1 {
 			chargedTotal += dec.BatteryCharge
-			t.Logf("  Hour %2d: CHARGED %.3f kW at price €%.5f/kWh (SOC: %.3f)",
+			t.Logf("  Hour %2d: CHARGED %.3f kW at price %.5f/kWh (SOC: %.3f)",
 				i, dec.BatteryCharge, dec.ImportPrice, dec.BatterySOC)
 		}
 		if dec.BatteryDischarge > 0.1 {
@@ -588,12 +588,12 @@ func TestOptimize(t *testing.T) {
 			if dec.GridExport > 0.001 {
 				exported = fmt.Sprintf(" → EXPORTED %.3f kW", dec.GridExport)
 			}
-			t.Logf("  Hour %2d: DISCHARGED %.3f kW at price €%.5f/kWh (SOC: %.3f)%s",
+			t.Logf("  Hour %2d: DISCHARGED %.3f kW at price %.5f/kWh (SOC: %.3f)%s",
 				i, dec.BatteryDischarge, dec.ExportPrice, dec.BatterySOC, exported)
 		}
 	}
 	t.Logf("\nTotal charged: %.3f kW, Total discharged: %.3f kW", chargedTotal, dischargedTotal)
-	t.Logf("Degradation cost: €%.4f (%.3f kW throughput × €%.2f/kWh)",
+	t.Logf("Degradation cost: %.4f (%.3f kW throughput × %.2f/kWh)",
 		(chargedTotal+dischargedTotal)*config.BatteryDegradationCost,
 		chargedTotal+dischargedTotal,
 		config.BatteryDegradationCost)
@@ -617,8 +617,8 @@ func TestOptimize(t *testing.T) {
 		}
 	}
 
-	t.Logf("Lowest price: €%.5f/kWh at hour %d", minPrice, minPriceHour)
-	t.Logf("Highest price: €%.5f/kWh at hour %d", maxPrice, maxPriceHour)
+	t.Logf("Lowest price: %.5f/kWh at hour %d", minPrice, minPriceHour)
+	t.Logf("Highest price: %.5f/kWh at hour %d", maxPrice, maxPriceHour)
 
 	// Check that battery tends to charge during low prices
 	// (Not strict since it depends on SOC constraints and overall optimization)

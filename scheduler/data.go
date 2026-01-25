@@ -142,20 +142,20 @@ func (d *DataSamples) GetLatestPower() float64 {
 	return d.samples[len(d.samples)-1].pvPower
 }
 
-func (s *MinerScheduler) runDataPoll(samples *DataSamples) {
+func (s *MinerScheduler) runDataPoll(samples *DataSamples) error {
 	if s.config.PlantModbusAddress == "" {
-		return
+		return nil
 	}
 	client, err := sigenergy.NewTCPClient(s.config.PlantModbusAddress, sigenergy.PlantAddress)
 	if err != nil {
 		s.logger.Printf("Data integration: failed to create modbus client: %v", err)
-		return
+		return err
 	}
 	defer client.Close()
 	info, err := client.ReadPlantRunningInfo()
 	if err != nil {
 		s.logger.Printf("Data integration: failed to read PlantRunningInfo: %v", err)
-		return
+		return err
 	}
 	samples.AddSample(
 		info.PhotovoltaicPower,
@@ -165,19 +165,20 @@ func (s *MinerScheduler) runDataPoll(samples *DataSamples) {
 		info.ESSSOC,
 		time.Now(),
 	)
+	return nil
 }
 
-func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval time.Duration, dataDB *sql.DB, deviceID int, dryRun bool) {
+func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval time.Duration, dataDB *sql.DB, deviceID int, dryRun bool) error {
 	if samples.IsEmpty() {
 		s.logger.Printf("Data integration: no samples collected in period")
-		return
+		return nil
 	}
 
 	data := samples.IntegrateSamples(pollInterval)
 	timestamp := time.Now()
 
 	if dataDB == nil {
-		return
+		return nil
 	}
 
 	// Fetch weather data from meteo API
@@ -205,18 +206,18 @@ func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval t
 		if found && spotPrice > 0 {
 			// Import cost: (spot price + operator fee + delivery fee) * energy in MWh
 			importPricePerMWh := spotPrice + config.ImportPriceOperatorFee + config.ImportPriceDeliveryFee
-			gridImportCost = (importPricePerMWh / 1000.0) * data.gridImportPower // Convert to EUR
+			gridImportCost = (importPricePerMWh / 1000.0) * data.gridImportPower
 
 			// Export revenue (negative cost): (spot price - operator fee) * energy in MWh
 			exportPricePerMWh := spotPrice - config.ExportPriceOperatorFee
-			gridExportCost = (exportPricePerMWh / 1000.0) * data.gridExportPower // Convert to EUR
+			gridExportCost = (exportPricePerMWh / 1000.0) * data.gridExportPower
 		}
 	}
 
 	if dryRun {
 		// DRY-RUN MODE: Log the action without saving to database
 		s.logger.Printf("Data integration [DRY-RUN]: would save metrics for device_id=%d at %s", deviceID, timestamp.Format(time.RFC3339))
-		s.logger.Printf("  PV: %.3f kWh, Grid Import: %.3f kWh (€%.3f), Grid Export: %.3f kWh (€%.3f)",
+		s.logger.Printf("  PV: %.3f kWh, Grid Import: %.3f kWh (%.3f), Grid Export: %.3f kWh (%.3f)",
 			data.pvTotalPower, data.gridImportPower, gridImportCost, data.gridExportPower, gridExportCost)
 		s.logger.Printf("  Battery Charge: %.3f kWh, Battery Discharge: %.3f kWh, SOC: %.1f%%",
 			data.batteryChargePower, data.batteryDischargePower, data.batterySoc)
@@ -247,16 +248,17 @@ func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval t
 		)
 		if err != nil {
 			s.logger.Printf("Data integration: failed to insert metrics: %v", err)
-			return
+			return nil
 		}
 
 		s.logger.Printf("Data integration: saved metrics for device_id=%d at %s", deviceID, timestamp.Format(time.RFC3339))
-		s.logger.Printf("  PV: %.3f kWh, Grid Import: %.3f kWh (€%.3f), Grid Export: %.3f kWh (€%.3f)",
+		s.logger.Printf("  PV: %.3f kWh, Grid Import: %.3f kWh (%.3f), Grid Export: %.3f kWh (%.3f)",
 			data.pvTotalPower, data.gridImportPower, gridImportCost, data.gridExportPower, gridExportCost)
 		s.logger.Printf("  Battery Charge: %.3f kWh, Battery Discharge: %.3f kWh, SOC: %.1f%%",
 			data.batteryChargePower, data.batteryDischargePower, data.batterySoc)
 		s.logger.Printf("  EV Charge: %.3f kWh, Load: %.3f kWh", data.evdcChargePower, data.loadPower)
 	}
+	return nil
 }
 
 func (s *MinerScheduler) fetchCloudCoverage() (*float64, error) {

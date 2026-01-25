@@ -13,7 +13,7 @@ import (
 )
 
 // RunMPCOptimize executes the MPC optimization task
-func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) {
+func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) error {
 	s.logger.Printf("Starting MPC optimization task at %s", time.Now().Format(time.RFC3339))
 
 	config := s.GetConfig()
@@ -21,14 +21,14 @@ func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) {
 	// Check if Plant Modbus Address is configured
 	if config.PlantModbusAddress == "" {
 		s.logger.Printf("MPC optimization skipped: PlantModbusAddress not configured")
-		return
+		return nil
 	}
 
 	// Step 1: Read plant running info from inverter
 	plantInfo, err := s.readPlantRunningInfo(config)
 	if err != nil {
 		s.logger.Printf("Error reading plant running info from inverter: %v", err)
-		return
+		return err
 	}
 
 	// Extract initial SOC from plant info
@@ -39,12 +39,12 @@ func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) {
 	forecast, err := s.buildMPCForecast(ctx, config, plantInfo)
 	if err != nil {
 		s.logger.Printf("Error building MPC forecast: %v", err)
-		return
+		return err
 	}
 
 	if len(forecast) == 0 {
 		s.logger.Printf("No forecast data available for MPC optimization")
-		return
+		return nil
 	}
 
 	s.logger.Printf("Built forecast with %d time slots", len(forecast))
@@ -69,7 +69,7 @@ func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) {
 	decisions := controller.Optimize(forecast)
 	if len(decisions) == 0 {
 		s.logger.Printf("MPC optimization produced no decisions")
-		return
+		return nil
 	}
 
 	// Step 5: Save optimization results to memory
@@ -110,10 +110,11 @@ func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) {
 
 	if err != nil {
 		s.logger.Printf("Error executing MPC decision: %v (will retry every minute)", err)
-		return
+		return err
 	}
 
 	s.logger.Printf("MPC optimization task completed successfully")
+	return nil
 }
 
 // readPlantRunningInfo reads the plant running information from the inverter
@@ -536,21 +537,15 @@ func (s *MinerScheduler) executeMPCDecision(decision *mpc.ControlDecision, dryRu
 
 // runMPCExecution re-executes the current MPC decision only if previous execution failed
 // This ensures the decision is applied even if previous execution failed
-func (s *MinerScheduler) runMPCExecution() {
+func (s *MinerScheduler) runMPCExecution() error {
 
 	s.mu.RLock()
 	config := s.GetConfig()
 
-	// Check if Plant Modbus Address is configured
-	if config.PlantModbusAddress == "" {
+	// Check if Plant Modbus Address is configured and there are decisions
+	if config.PlantModbusAddress == "" || len(s.mpcDecisions) == 0 {
 		s.mu.RUnlock()
-		return
-	}
-
-	// Get current MPC decision based on current timestamp
-	if len(s.mpcDecisions) == 0 {
-		s.mu.RUnlock()
-		return
+		return nil
 	}
 
 	now := time.Now().Unix()
@@ -570,7 +565,7 @@ func (s *MinerScheduler) runMPCExecution() {
 	if currentDecision == nil {
 		// No matching decision found for current timestamp
 		s.mu.RUnlock()
-		return
+		return nil
 	}
 
 	lastExecuted := s.lastExecutedDecision
@@ -579,7 +574,7 @@ func (s *MinerScheduler) runMPCExecution() {
 	// Check if this decision has already been executed
 	if lastExecuted != nil && currentDecision.Timestamp == lastExecuted.Timestamp {
 		// Decision already executed, no need to retry
-		return
+		return nil
 	}
 
 	s.logger.Printf("Executing MPC decision for timestamp %d (hour %d)", currentDecision.Timestamp, currentDecision.Hour)
@@ -593,7 +588,7 @@ func (s *MinerScheduler) runMPCExecution() {
 		s.lastExecutedDecision = nil
 		s.mu.Unlock()
 		s.logger.Printf("Error executing MPC decision: %v (will retry again in 1 minute)", err)
-		return
+		return err
 	}
 
 	// Execution succeeded, store the executed decision
@@ -601,4 +596,5 @@ func (s *MinerScheduler) runMPCExecution() {
 	s.mu.Unlock()
 
 	s.logger.Printf("Successfully executed MPC decision")
+	return nil
 }
