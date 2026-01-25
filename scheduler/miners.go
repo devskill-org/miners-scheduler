@@ -42,15 +42,16 @@ func (s *MinerScheduler) discoverMiners(ctx context.Context) error {
 }
 
 // RunMinerDiscovery runs the miner discovery process as a scheduled task
-func (s *MinerScheduler) RunMinerDiscovery(ctx context.Context) {
+func (s *MinerScheduler) RunMinerDiscovery(ctx context.Context) error {
 	s.logger.Printf("Starting miner discovery task at %s", time.Now().Format(time.RFC3339))
 
 	if err := s.discoverMiners(ctx); err != nil {
 		s.logger.Printf("Error discovering miners: %v", err)
-		return
+		return err
 	}
 
 	s.logger.Printf("Miner discovery task completed successfully")
+	return nil
 }
 
 // getMinerPowerConsumption returns the power consumption in kW for a given miner state and work mode
@@ -301,10 +302,10 @@ func (s *MinerScheduler) controlMiner(m *miners.AvalonQHost, totalPower float64,
 }
 
 // runStateCheck executes the state monitoring task for miners
-func (s *MinerScheduler) runStateCheck(ctx context.Context) {
+func (s *MinerScheduler) runStateCheck(ctx context.Context) error {
 	minersList := s.refreshMinersState(ctx)
 	if len(minersList) == 0 {
-		return
+		return nil
 	}
 
 	isDryRun := s.config.DryRun
@@ -409,5 +410,7 @@ func (s *MinerScheduler) runStateCheck(ctx context.Context) {
 		for _, err := range errors {
 			s.logger.Printf("  - %v", err)
 		}
+		return fmt.Errorf("errors during state check")
 	}
+	return nil
 }
