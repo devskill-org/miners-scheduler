@@ -115,6 +115,8 @@ func (s *MinerScheduler) loadLatestMPCDecisions(ctx context.Context) ([]mpc.Cont
 		return nil, fmt.Errorf("database connection not available")
 	}
 
+	config := s.GetConfig()
+
 	// Get current Unix timestamp
 	now := ctx.Value("now")
 	var nowTimestamp int64
@@ -126,6 +128,8 @@ func (s *MinerScheduler) loadLatestMPCDecisions(ctx context.Context) ([]mpc.Cont
 	if nowTimestamp == 0 {
 		nowTimestamp = s.getCurrentTimestamp()
 	}
+
+	ts := nowTimestamp - int64(config.CheckPriceInterval.Seconds())
 
 	// Load decisions with timestamp >= now, ordered by timestamp
 	rows, err := s.db.QueryContext(ctx, `
@@ -147,7 +151,7 @@ func (s *MinerScheduler) loadLatestMPCDecisions(ctx context.Context) ([]mpc.Cont
 		FROM mpc_decisions
 		WHERE timestamp >= $1
 		ORDER BY timestamp ASC
-	`, nowTimestamp)
+	`, ts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query decisions: %w", err)
 	}
@@ -198,7 +202,7 @@ func (s *MinerScheduler) loadLatestMPCDecisions(ctx context.Context) ([]mpc.Cont
 		return nil, nil
 	}
 
-	s.logger.Printf("Loaded %d MPC decisions from database (starting from timestamp %d)", len(decisions), nowTimestamp)
+	s.logger.Printf("Loaded %d MPC decisions from database (starting from timestamp %d)", len(decisions), ts)
 
 	return decisions, nil
 }

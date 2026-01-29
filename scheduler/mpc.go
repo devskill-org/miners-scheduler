@@ -491,8 +491,8 @@ func (s *MinerScheduler) executeMPCDecision(decision *mpc.ControlDecision, dryRu
 
 	} else if decision.BatteryDischarge > 0.01 {
 		// Battery should discharge
-		// Mode 6: Command discharging (ESS first) - discharge from battery first
-		mode = 6
+		// Mode 5: Command discharging (PV first) - discharge from PV first
+		mode = 5
 		dischargeLimit := decision.BatteryDischarge
 		s.logger.Printf("Setting battery to DISCHARGE mode: %.1f kW", dischargeLimit)
 
@@ -555,8 +555,8 @@ func (s *MinerScheduler) runMPCExecution() error {
 	for i := range s.mpcDecisions {
 		decision := &s.mpcDecisions[i]
 		// Check if current time falls within this decision's hour
-		// Each decision covers a 1-hour window starting from its timestamp
-		if now >= decision.Timestamp && now < decision.Timestamp+3600 {
+		// Each decision covers a check price interval window starting from its timestamp
+		if now >= decision.Timestamp && now < decision.Timestamp+int64(config.CheckPriceInterval.Seconds()) {
 			currentDecision = decision
 			break
 		}
@@ -565,6 +565,7 @@ func (s *MinerScheduler) runMPCExecution() error {
 	if currentDecision == nil {
 		// No matching decision found for current timestamp
 		s.mu.RUnlock()
+		s.logger.Printf("No matching decision found for the current timestamp")
 		return nil
 	}
 
