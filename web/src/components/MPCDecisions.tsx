@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { MPCDecisionInfo } from "../types/api";
@@ -82,36 +82,56 @@ interface MPCDecisionsProps {
 }
 
 export function MPCDecisions({ decisions }: MPCDecisionsProps) {
-  const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<uPlot | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [showTable, setShowTable] = useState(false);
 
-  useEffect(() => {
-    if (!decisions || decisions.length === 0 || !chartRef.current) {
+  // Store decisions and derived data in refs so chart callbacks can access them
+  const decisionsRef = useRef<MPCDecisionInfo[]>([]);
+  const highsRef = useRef<number[]>([]);
+
+  // Helper function to determine battery action
+  const getBatteryAction = useCallback((decision: MPCDecisionInfo) => {
+    if (decision.battery_charge > 0.1) {
+      return { action: "charge", power: decision.battery_charge };
+    } else if (decision.battery_discharge > 0.1) {
+      return { action: "discharge", power: decision.battery_discharge };
+    }
+    return { action: "idle", power: 0 };
+  }, []);
+
+  // Helper function to determine grid action
+  const getGridAction = useCallback((decision: MPCDecisionInfo) => {
+    if (decision.grid_import > 0.1) {
+      return { action: "import", power: decision.grid_import };
+    } else if (decision.grid_export > 0.1) {
+      return { action: "export", power: decision.grid_export };
+    }
+    return { action: "idle", power: 0 };
+  }, []);
+
+  // Helper function to get action color class
+  const getActionClass = useCallback((action: string) => {
+    switch (action) {
+      case "charge":
+      case "import":
+        return "action-import";
+      case "discharge":
+      case "export":
+        return "action-export";
+      default:
+        return "action-idle";
+    }
+  }, []);
+
+  // Callback ref to create chart when div is mounted
+  const chartRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node || chartInstanceRef.current) {
       return;
     }
 
-    // Prepare data for candlestick chart
-    const timestamps = decisions.map((d) => d.timestamp);
-
-    // Convert prices from €/MWh to €/kWh for better visualization
-    const importPrices = decisions.map((d) => d.import_price * 1000);
-    const exportPrices = decisions.map((d) => d.export_price * 1000);
-
-    // Calculate open, high, low, close for candlesticks
-    // Since export price is always lower than import price:
-    // Open = export price (low), Close = import price (high)
-    // High = import price, Low = export price
-    const opens = exportPrices;
-    const closes = importPrices;
-    const highs = importPrices;
-    const lows = exportPrices;
-
-    const data: uPlot.AlignedData = [timestamps, opens, highs, lows, closes];
-
     const opts: uPlot.Options = {
-      width: chartRef.current.clientWidth,
+      width: node.clientWidth,
       height: 400,
       title: "Price Trends & MPC Actions",
       tzDate: (ts) => new Date(ts * 1000),
@@ -125,12 +145,12 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
 
               const { left, top, idx } = u.cursor;
 
-              if (idx == null || idx < 0 || idx >= decisions.length) {
+              if (idx == null || idx < 0 || idx >= decisionsRef.current.length) {
                 tooltip.style.display = "none";
                 return;
               }
 
-              const decision = decisions[idx];
+              const decision = decisionsRef.current[idx];
               const batteryAction = getBatteryAction(decision);
               const gridAction = getGridAction(decision);
 
@@ -214,7 +234,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
               const bodyMaxWidth = 16;
 
               // Draw candlesticks
-              for (let i = 0; i < decisions.length; i++) {
+              for (let i = 0; i < decisionsRef.current.length; i++) {
                 const xVal = xdata[i];
                 const yOpen = open[i];
                 const yHigh = high[i];
@@ -254,7 +274,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
                 const bodyTop = Math.min(yO, yC);
                 const bodyHeight = Math.abs(yO - yC);
 
-                const decision = decisions[i];
+                const decision = decisionsRef.current[i];
                 const batteryAction = getBatteryAction(decision);
 
                 if (batteryAction.action === "charge") {
@@ -276,12 +296,12 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
               // Draw grid action indicators
               ctx.font = "bold 16px sans-serif";
 
-              for (let i = 0; i < decisions.length; i++) {
-                const decision = decisions[i];
+              for (let i = 0; i < decisionsRef.current.length; i++) {
+                const decision = decisionsRef.current[i];
                 const gridAction = getGridAction(decision);
 
                 const cx = u.valToPos(decision.timestamp, "x", true);
-                const cy = u.valToPos(highs[i], "y", true);
+                const cy = u.valToPos(highsRef.current[i], "y", true);
 
                 if (cx && cy) {
                   // Draw grid action indicator with bigger arrows
@@ -406,14 +426,51 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
       },
     };
 
-    const chart = new uPlot(opts, data, chartRef.current);
+    // Create chart with empty initial data
+    const emptyData: uPlot.AlignedData = [[], [], [], [], []];
+    const chart = new uPlot(opts, emptyData, node);
     chartInstanceRef.current = chart;
+  }, [getBatteryAction, getGridAction, getActionClass]);
 
-    // Cleanup
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
-      chart.destroy();
-      chartInstanceRef.current = null;
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.destroy();
+        chartInstanceRef.current = null;
+      }
     };
+  }, []);
+
+  // Update chart data when decisions change
+  useEffect(() => {
+    if (!decisions || decisions.length === 0 || !chartInstanceRef.current) {
+      return;
+    }
+
+    // Update refs with current decisions data
+    decisionsRef.current = decisions;
+
+    // Prepare data for candlestick chart
+    const timestamps = decisions.map((d) => d.timestamp);
+
+    // Convert prices from €/MWh to €/kWh for better visualization
+    const importPrices = decisions.map((d) => d.import_price * 1000);
+    const exportPrices = decisions.map((d) => d.export_price * 1000);
+
+    // Calculate open, high, low, close for candlesticks
+    const opens = exportPrices;
+    const closes = importPrices;
+    const highs = importPrices;
+    const lows = exportPrices;
+
+    // Store highs in ref for chart callbacks
+    highsRef.current = highs;
+
+    const data: uPlot.AlignedData = [timestamps, opens, highs, lows, closes];
+
+    // Update the existing chart with new data
+    chartInstanceRef.current.setData(data);
   }, [decisions]);
 
   if (!decisions || decisions.length === 0) {
@@ -429,40 +486,6 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
 
   // Calculate total profit
   const totalProfit = decisions.reduce((sum, dec) => sum + dec.profit, 0);
-
-  // Helper function to determine battery action
-  const getBatteryAction = (decision: MPCDecisionInfo) => {
-    if (decision.battery_charge > 0.1) {
-      return { action: "charge", power: decision.battery_charge };
-    } else if (decision.battery_discharge > 0.1) {
-      return { action: "discharge", power: decision.battery_discharge };
-    }
-    return { action: "idle", power: 0 };
-  };
-
-  // Helper function to determine grid action
-  const getGridAction = (decision: MPCDecisionInfo) => {
-    if (decision.grid_import > 0.1) {
-      return { action: "import", power: decision.grid_import };
-    } else if (decision.grid_export > 0.1) {
-      return { action: "export", power: decision.grid_export };
-    }
-    return { action: "idle", power: 0 };
-  };
-
-  // Helper function to get action color class
-  const getActionClass = (action: string) => {
-    switch (action) {
-      case "charge":
-      case "import":
-        return "action-import";
-      case "discharge":
-      case "export":
-        return "action-export";
-      default:
-        return "action-idle";
-    }
-  };
 
   return (
     <section className="card">
