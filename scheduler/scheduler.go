@@ -277,7 +277,7 @@ func (s *MinerScheduler) Start(ctx context.Context, serverOnly bool) error {
 		},
 		{
 			name:         "DataPoll",
-			initialDelay: pvDataInitialDelay,
+			initialDelay: 0,
 			interval:     config.PVPollInterval,
 			runFunc: func() error {
 				return s.runDataPoll(dataSamples)

@@ -82,16 +82,28 @@ type IntegratedData struct {
 	evdcChargePower       float64
 	loadPower             float64
 	batterySoc            float64
+	timestamp             time.Time
+	sampleCount           int // Number of samples integrated
 }
 
-// IntegrateSamples computes integrated power values from collected samples.
-func (d *DataSamples) IntegrateSamples(pollInterval time.Duration) IntegratedData {
+// IntegrateSamples computes integrated power values from collected samples up to the specified cutoff time.
+// Only samples with timestamp <= cutoffTime are integrated.
+// The cutoffTime represents the end of the integration period and is used as the result timestamp.
+// Samples are preserved and must be cleared explicitly using ClearBefore() after successful processing.
+func (d *DataSamples) IntegrateSamples(pollInterval time.Duration, cutoffTime time.Time) IntegratedData {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	var result IntegratedData
+	result.timestamp = cutoffTime
 
 	for _, sample := range d.samples {
+		// Only integrate samples that belong to this period
+		if sample.ts.After(cutoffTime) {
+			continue
+		}
+
+		result.sampleCount++
 		energyKWh := pollInterval.Seconds() / 3600.0 // Convert to hours
 
 		result.pvTotalPower += sample.pvPower * energyKWh
@@ -121,8 +133,23 @@ func (d *DataSamples) IntegrateSamples(pollInterval time.Duration) IntegratedDat
 	result.loadPower = result.pvTotalPower + result.batteryDischargePower + result.gridImportPower -
 		result.batteryChargePower - result.gridExportPower - result.evdcChargePower
 
-	d.samples = d.samples[:0]
 	return result
+}
+
+// ClearBefore removes all samples with timestamp <= cutoffTime from the collection.
+// Should only be called after samples have been successfully processed for that period.
+func (d *DataSamples) ClearBefore(cutoffTime time.Time) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	// Filter out samples that should be cleared
+	filteredSamples := make([]DataSample, 0, len(d.samples))
+	for _, sample := range d.samples {
+		if sample.ts.After(cutoffTime) {
+			filteredSamples = append(filteredSamples, sample)
+		}
+	}
+	d.samples = filteredSamples
 }
 
 // IsEmpty returns true if there are no samples collected.
@@ -169,15 +196,27 @@ func (s *MinerScheduler) runDataPoll(samples *DataSamples) error {
 }
 
 func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval time.Duration, dataDB *sql.DB, deviceID int, dryRun bool) error {
-	if samples.IsEmpty() {
-		s.logger.Printf("Data integration: no samples collected in period")
+	// Calculate the period boundary timestamp (end of current integration period)
+	// This ensures samples are grouped by their integration period
+	config := s.GetConfig()
+	now := time.Now()
+	periodEndTime := now.Truncate(config.PVIntegrationPeriod)
+	if periodEndTime.Before(now.Add(-config.PVIntegrationPeriod)) {
+		periodEndTime = periodEndTime.Add(config.PVIntegrationPeriod)
+	}
+
+	// Integrate only samples up to the period boundary
+	data := samples.IntegrateSamples(pollInterval, periodEndTime)
+
+	if data.sampleCount == 0 {
+		s.logger.Printf("Data integration: no samples collected in period ending at %s", periodEndTime.Format(time.RFC3339))
 		return nil
 	}
 
-	data := samples.IntegrateSamples(pollInterval)
-	timestamp := time.Now()
+	timestamp := data.timestamp
 
 	if dataDB == nil {
+		samples.ClearBefore(periodEndTime)
 		return nil
 	}
 
@@ -193,7 +232,6 @@ func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval t
 	}
 
 	// Calculate costs using current energy prices
-	config := s.GetConfig()
 
 	// Get current spot price for cost calculations
 	var gridImportCost, gridExportCost float64
@@ -216,7 +254,8 @@ func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval t
 
 	if dryRun {
 		// DRY-RUN MODE: Log the action without saving to database
-		s.logger.Printf("Data integration [DRY-RUN]: would save metrics for device_id=%d at %s", deviceID, timestamp.Format(time.RFC3339))
+		s.logger.Printf("Data integration [DRY-RUN]: would save metrics for device_id=%d at %s (samples: %d)",
+			deviceID, timestamp.Format(time.RFC3339), data.sampleCount)
 		s.logger.Printf("  PV: %.3f kWh, Grid Import: %.3f kWh (%.3f), Grid Export: %.3f kWh (%.3f)",
 			data.pvTotalPower, data.gridImportPower, gridImportCost, data.gridExportPower, gridExportCost)
 		s.logger.Printf("  Battery Charge: %.3f kWh, Battery Discharge: %.3f kWh, SOC: %.1f%%",
@@ -228,6 +267,7 @@ func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval t
 		if weatherSymbol != nil {
 			s.logger.Printf("  Weather: %s", *weatherSymbol)
 		}
+		samples.ClearBefore(periodEndTime)
 	} else {
 		// Insert comprehensive energy flow data
 		_, err = dataDB.Exec(
@@ -248,10 +288,14 @@ func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval t
 		)
 		if err != nil {
 			s.logger.Printf("Data integration: failed to insert metrics: %v", err)
-			return nil
+			return err
 		}
 
-		s.logger.Printf("Data integration: saved metrics for device_id=%d at %s", deviceID, timestamp.Format(time.RFC3339))
+		// Only clear samples for this period after successful DB insertion
+		samples.ClearBefore(periodEndTime)
+
+		s.logger.Printf("Data integration: saved metrics for device_id=%d at %s (samples: %d)",
+			deviceID, timestamp.Format(time.RFC3339), data.sampleCount)
 		s.logger.Printf("  PV: %.3f kWh, Grid Import: %.3f kWh (%.3f), Grid Export: %.3f kWh (%.3f)",
 			data.pvTotalPower, data.gridImportPower, gridImportCost, data.gridExportPower, gridExportCost)
 		s.logger.Printf("  Battery Charge: %.3f kWh, Battery Discharge: %.3f kWh, SOC: %.1f%%",
