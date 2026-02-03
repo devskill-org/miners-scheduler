@@ -92,7 +92,12 @@ func (s *MinerScheduler) runPriceCheck(ctx context.Context) error {
 
 // getCurrentAvgPrice gets the current hourly average electricity price, downloading new data if needed
 func (s *MinerScheduler) getCurrentAvgPrice(ctx context.Context) (float64, error) {
-	now := time.Now()
+	location, err := time.LoadLocation(s.config.Location)
+	if err != nil {
+		return 0, fmt.Errorf("failed to load location: %w", err)
+	}
+
+	now := time.Now().In(location)
 
 	marketData, err := s.GetMarketData(ctx)
 	if err != nil {
