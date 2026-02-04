@@ -6,10 +6,27 @@ import { PowerDisplay } from "./components/PowerDisplay";
 import { SolarInfo } from "./components/SolarInfo";
 import { MPCDecisions } from "./components/MPCDecisions";
 import { MetricsSummary } from "./components/MetricsSummary";
+import { DemoInfo } from "./components/DemoInfo";
 import { useWebSocket } from "./hooks/useWebSocket";
+import { useState, useEffect } from "react";
+
+// Check if we're in demo mode
+const isDemoMode = typeof __DEMO_MODE__ !== 'undefined' && __DEMO_MODE__;
 
 function App() {
   const { health, status, loading, error, wsConnected } = useWebSocket();
+  const [showDemoInfo, setShowDemoInfo] = useState(false);
+
+  // Show demo info automatically on first load in demo mode
+  useEffect(() => {
+    if (isDemoMode) {
+      const hasSeenDemo = localStorage.getItem('ems-demo-info-seen');
+      if (!hasSeenDemo) {
+        setShowDemoInfo(true);
+        localStorage.setItem('ems-demo-info-seen', 'true');
+      }
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -50,6 +67,22 @@ function App() {
           Energy Management System
         </h1>
         <div className="status-badges">
+          {isDemoMode && (
+            <StatusBadge
+              isActive={true}
+              activeLabel="🎭 Demo Mode"
+              inactiveLabel=""
+            />
+          )}
+          {isDemoMode && (
+            <button
+              className="demo-info-trigger"
+              onClick={() => setShowDemoInfo(true)}
+              title="Learn about Demo Mode"
+            >
+              ℹ️
+            </button>
+          )}
           <StatusBadge
             isActive={isHealthy}
             activeLabel="✓ Healthy"
@@ -246,6 +279,10 @@ function App() {
           available power
         </p>
       </footer>
+
+      {isDemoMode && showDemoInfo && (
+        <DemoInfo onClose={() => setShowDemoInfo(false)} />
+      )}
     </div>
   );
 }

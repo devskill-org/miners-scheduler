@@ -2,6 +2,43 @@ import { useEffect, useState, useRef } from "react";
 import { MetricsSummary as MetricsSummaryType } from "../types/api";
 import "../App.css";
 
+// Check if we're in demo mode
+const isDemoMode = typeof __DEMO_MODE__ !== 'undefined' && __DEMO_MODE__;
+
+// Generate mock metrics summary data for demo mode
+function generateMockMetricsSummary(date: Date): MetricsSummaryType {
+  const dayOfMonth = date.getDate();
+  
+  // Use day of month to generate consistent but varying data
+  const seed = dayOfMonth / 31;
+  
+  // Generate realistic import/export values
+  const totalImportKwh = 50 + seed * 100; // 50-150 kWh
+  const totalExportKwh = 30 + seed * 80; // 30-110 kWh
+  
+  // Typical electricity prices in €/kWh
+  const avgImportPrice = 0.12; // 12 cents per kWh
+  const avgExportPrice = 0.08; // 8 cents per kWh
+  
+  const totalImportCost = totalImportKwh * avgImportPrice;
+  const totalExportCost = totalExportKwh * avgExportPrice;
+  
+  const startTime = new Date(date);
+  startTime.setHours(0, 0, 0, 0);
+  
+  const endTime = new Date(date);
+  endTime.setHours(23, 59, 59, 999);
+  
+  return {
+    total_import_cost: totalImportCost,
+    total_export_cost: totalExportCost,
+    total_import_kwh: totalImportKwh,
+    total_export_kwh: totalExportKwh,
+    start_time: startTime.toISOString(),
+    end_time: endTime.toISOString(),
+  };
+}
+
 export function MetricsSummary() {
   const [metricsSummary, setMetricsSummary] =
     useState<MetricsSummaryType | null>(null);
@@ -27,20 +64,29 @@ export function MetricsSummary() {
       try {
         setLoading(true);
 
-        // Calculate time range for selected date (calendar day - midnight to midnight)
-        const startTime = selectedDate.toISOString();
-        const endDate = new Date(selectedDate);
-        endDate.setHours(23, 59, 59, 999);
-        const endTime = endDate.toISOString();
+        // In demo mode, use mock data
+        if (isDemoMode) {
+          // Simulate network delay
+          await new Promise(resolve => setTimeout(resolve, 300));
+          const mockData = generateMockMetricsSummary(selectedDate);
+          setMetricsSummary(mockData);
+          setError(null);
+        } else {
+          // Calculate time range for selected date (calendar day - midnight to midnight)
+          const startTime = selectedDate.toISOString();
+          const endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+          const endTime = endDate.toISOString();
 
-        const url = `/api/metrics/summary?start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}`;
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const url = `/api/metrics/summary?start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}`;
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const data: MetricsSummaryType = await response.json();
+          setMetricsSummary(data);
+          setError(null);
         }
-        const data: MetricsSummaryType = await response.json();
-        setMetricsSummary(data);
-        setError(null);
       } catch (error) {
         console.error("Failed to fetch metrics summary:", error);
         setError("Failed to load actual costs data");
