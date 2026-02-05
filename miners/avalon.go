@@ -322,33 +322,52 @@ func (s *StatsItem) UnmarshalJSON(data []byte) error {
 
 // Discover searches for Avalon miners on the specified network and returns a list of discovered hosts.
 func Discover(ctx context.Context, network string) []*AvalonQHost {
-	hosts := make([]*AvalonQHost, 0)
+	results := make(chan *AvalonQHost)
 	var wg sync.WaitGroup
 	queue := make(chan string, 25)
-	for a := range getAddresses(network) {
+
+	// Collector goroutine - single writer to hosts slice
+	hosts := make([]*AvalonQHost, 0)
+	done := make(chan struct{})
+	go func() {
+		for host := range results {
+			hosts = append(hosts, host)
+		}
+		close(done)
+	}()
+
+	for a := range getAddresses(ctx, network) {
 		address := a.String()
 		queue <- address
 		wg.Go(func() {
 			if v, err := version(ctx, address, 4028); err == nil {
-				hosts = append(hosts, &AvalonQHost{
+				results <- &AvalonQHost{
 					Address: address,
 					Port:    4028,
 					Version: v,
-				})
+				}
 			}
 			<-queue
 		})
 	}
 	wg.Wait()
-	close(queue)
+	close(results)
+	<-done
 	return hosts
 }
 
-func getAddresses(network string) iter.Seq[netip.Addr] {
+func getAddresses(ctx context.Context, network string) iter.Seq[netip.Addr] {
 	return func(yield func(netip.Addr) bool) {
 		prefix, _ := netip.ParsePrefix(network)
 		next := prefix.Addr().Next()
 		for next.IsValid() && prefix.Contains(next.Next()) {
+			// Check if context is cancelled before yielding each address
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			
 			if !yield(next) {
 				return
 			}
