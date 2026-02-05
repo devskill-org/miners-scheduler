@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { HealthResponse, StatusResponse, WebSocketMessage } from "../types/api";
+import { createMockWebSocket } from "../utils/mockData";
 
 interface UseWebSocketReturn {
   health: HealthResponse | null;
@@ -9,6 +10,13 @@ interface UseWebSocketReturn {
   wsConnected: boolean;
 }
 
+// Check if we're in demo mode
+const isDemoMode = typeof __DEMO_MODE__ !== 'undefined' && __DEMO_MODE__;
+
+/**
+ * Hook for WebSocket connection to EMS backend
+ * Automatically switches to mock data in demo mode
+ */
 export function useWebSocket(): UseWebSocketReturn {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [status, setStatus] = useState<StatusResponse | null>(null);
@@ -20,6 +28,7 @@ export function useWebSocket(): UseWebSocketReturn {
   const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const isConnectingRef = useRef(false);
+  const mockWsRef = useRef<{ close: () => void } | null>(null);
 
   const connectWebSocket = useCallback(() => {
     // Prevent duplicate connections
@@ -106,18 +115,45 @@ export function useWebSocket(): UseWebSocketReturn {
     };
   }, []);
 
-  useEffect(() => {
-    connectWebSocket();
+  const connectDemoMode = useCallback(() => {
+    console.log("Demo mode: Using mock data");
 
-    // Cleanup on unmount
+    // Simulate initial connection delay
+    const connectionTimeout = setTimeout(() => {
+      setLoading(false);
+      setWsConnected(true);
+    }, 500);
+
+    // Create mock WebSocket connection with updates every 10 seconds
+    mockWsRef.current = createMockWebSocket((data) => {
+      setHealth(data.health);
+      setStatus(data.status);
+    }, 10000);
+
     return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
+      clearTimeout(connectionTimeout);
+      if (mockWsRef.current) {
+        mockWsRef.current.close();
       }
     };
+  }, []);
+
+  useEffect(() => {
+    if (isDemoMode) {
+      return connectDemoMode();
+    } else {
+      connectWebSocket();
+
+      // Cleanup on unmount
+      return () => {
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+        }
+        if (wsRef.current) {
+          wsRef.current.close();
+        }
+      };
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

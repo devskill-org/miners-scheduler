@@ -36,6 +36,22 @@ npm run dev
 
 The application will be available at `http://localhost:3000`. API requests will be proxied to the backend at `http://localhost:8080`.
 
+### Demo Mode
+
+For development or demonstration purposes without a backend server, you can run the application in demo mode. This mode uses realistic mock data that simulates all backend functionality:
+
+```bash
+npm run dev:demo
+```
+
+In demo mode:
+- No backend connection is required
+- Realistic simulated data updates every 10 seconds
+- Solar power, battery, grid, and device data reflect realistic daily patterns
+- Electricity prices vary based on time of day
+- MPC decisions are generated for the next 24 hours
+- All UI components work exactly as they would with a real backend
+
 ## Production Build
 
 Build the application for production:
@@ -45,6 +61,27 @@ npm run build
 ```
 
 The built files will be in the `dist` directory, which the Go backend serves at the root path.
+
+### Demo Build
+
+Build a standalone demo version that doesn't require a backend:
+
+```bash
+npm run build:demo
+```
+
+The demo build will be in the `dist-demo` directory. You can preview it with:
+
+```bash
+npm run preview:demo
+```
+
+The demo build is useful for:
+- Demonstrations and presentations
+- UI/UX testing without backend setup
+- Showcasing the application to stakeholders
+- Development when backend is unavailable
+- Static hosting scenarios
 
 ## Project Structure
 
@@ -115,10 +152,11 @@ The web application consumes the following API endpoints:
 The Vite configuration includes:
 
 - Development server on port 3000
-- API proxy to backend on port 8080
-- WebSocket proxy for real-time updates
-- Production build output to `dist/`
+- API proxy to backend on port 8080 (disabled in demo mode)
+- WebSocket proxy for real-time updates (mock data in demo mode)
+- Production build output to `dist/` (or `dist-demo/` for demo builds)
 - Source maps enabled
+- Conditional compilation for demo mode via `__DEMO_MODE__` flag
 
 ## Customization
 
@@ -211,6 +249,8 @@ Historical data can be visualized with charts showing:
 - Enable React DevTools for component inspection
 - Check console for WebSocket connection status
 - Use network tab to debug API issues
+- Use demo mode for frontend-only development
+- Mock data generator can be customized in `src/utils/mockData.ts`
 
 ## License
 

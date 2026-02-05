@@ -85,6 +85,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
   const chartInstanceRef = useRef<uPlot | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [showTable, setShowTable] = useState(false);
+  const [chartReady, setChartReady] = useState(false);
 
   // Store decisions and derived data in refs so chart callbacks can access them
   const decisionsRef = useRef<MPCDecisionInfo[]>([]);
@@ -126,13 +127,23 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
 
   // Callback ref to create chart when div is mounted
   const chartRef = useCallback((node: HTMLDivElement | null) => {
-    if (!node || chartInstanceRef.current) {
+    if (!node) {
       return;
     }
 
-    const opts: uPlot.Options = {
-      width: node.clientWidth,
-      height: 400,
+    // If chart already exists, just return
+    if (chartInstanceRef.current) {
+      return;
+    }
+
+    // Add a small delay to ensure container is properly sized
+    setTimeout(() => {
+      // Ensure we have a valid width
+      const width = node.clientWidth || node.parentElement?.clientWidth || 800;
+
+      const opts: uPlot.Options = {
+        width: width,
+        height: 400,
       title: "Price Trends & MPC Actions",
       tzDate: (ts) => new Date(ts * 1000),
       padding: [25, 20, 0, 0],
@@ -331,7 +342,21 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
         },
         y: {
           range: (_u, min, max) => {
-            return [min, max + 100];
+            // uPlot's auto-scaling only considers visible series, but our candlestick
+            // series are hidden. We need to manually calculate from all data.
+            const allHighs = highsRef.current || [];
+            const allLows = decisionsRef.current?.map(d => d.export_price * 1000) || [];
+
+            if (allHighs.length === 0) {
+              return [min, max + 100];
+            }
+
+            const actualMax = Math.max(...allHighs);
+            const actualMin = Math.min(...allLows);
+            const range = actualMax - actualMin;
+            const padding = range * 0.1; // 10% padding
+
+            return [actualMin - padding * 0.5, actualMax + padding];
           },
         },
       },
@@ -424,27 +449,56 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
       legend: {
         show: false,
       },
-    };
+      };
 
-    // Create chart with empty initial data
-    const emptyData: uPlot.AlignedData = [[], [], [], [], []];
-    const chart = new uPlot(opts, emptyData, node);
-    chartInstanceRef.current = chart;
+      // Create chart with empty initial data
+      const emptyData: uPlot.AlignedData = [[], [], [], [], []];
+      const chart = new uPlot(opts, emptyData, node);
+      chartInstanceRef.current = chart;
+
+      // Mark chart as ready
+      setChartReady(true);
+
+      // Add ResizeObserver to handle container size changes
+      const resizeObserver = new ResizeObserver(() => {
+        if (chartInstanceRef.current && node.clientWidth > 0) {
+          const newWidth = node.clientWidth;
+          chartInstanceRef.current.setSize({ width: newWidth, height: 400 });
+        }
+      });
+
+      resizeObserver.observe(node);
+
+      // Store cleanup function
+      (node as any)._resizeObserver = resizeObserver;
+    }, 100); // 100ms delay to ensure DOM is ready
   }, [getBatteryAction, getGridAction, getActionClass]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      // Cleanup ResizeObserver if it exists
+      const chartNode = chartInstanceRef.current?.root;
+      if (chartNode && (chartNode as any)._resizeObserver) {
+        (chartNode as any)._resizeObserver.disconnect();
+      }
+
       if (chartInstanceRef.current) {
         chartInstanceRef.current.destroy();
         chartInstanceRef.current = null;
       }
+
+      setChartReady(false);
     };
   }, []);
 
   // Update chart data when decisions change
   useEffect(() => {
-    if (!decisions || decisions.length === 0 || !chartInstanceRef.current) {
+    if (!decisions || decisions.length === 0) {
+      return;
+    }
+
+    if (!chartInstanceRef.current || !chartReady) {
       return;
     }
 
@@ -471,7 +525,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
 
     // Update the existing chart with new data
     chartInstanceRef.current.setData(data);
-  }, [decisions]);
+  }, [decisions, chartReady]);
 
   if (!decisions || decisions.length === 0) {
     return (
@@ -517,6 +571,8 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
             borderRadius: "6px",
             padding: "1rem",
             border: "1px solid var(--color-border)",
+            minHeight: "450px",
+            width: "100%",
           }}
         />
         <div
