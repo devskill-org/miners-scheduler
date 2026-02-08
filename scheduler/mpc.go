@@ -267,6 +267,7 @@ func (s *MinerScheduler) getSolarForecast(config *Config, now time.Time, weather
 			WeatherSymbol: weatherSymbol,
 		}
 	}
+	solarForecast[0] = currentPVPower
 
 	return solarForecast, weatherData, nil
 }

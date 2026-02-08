@@ -309,17 +309,3 @@ func (mpc *Controller) isFeasible(dec ControlDecision) bool {
 	}
 	return true
 }
-
-// ExecuteControl applies the first decision and returns it
-func (mpc *Controller) ExecuteControl(forecast []TimeSlot) *ControlDecision {
-	decisions := mpc.Optimize(forecast)
-	if len(decisions) == 0 {
-		return nil
-	}
-
-	// Execute first decision
-	decision := decisions[0]
-	mpc.CurrentSOC = decision.BatterySOC
-
-	return &decision
-}
