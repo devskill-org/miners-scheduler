@@ -44,36 +44,40 @@ func TestMPCPersistence_SaveAndLoad(t *testing.T) {
 	now := time.Now().Unix()
 	decisions := []mpc.ControlDecision{
 		{
-			Hour:             0,
-			Timestamp:        now + 3600,
-			BatteryCharge:    10.5,
-			BatteryDischarge: 0,
-			GridImport:       5.0,
-			GridExport:       0,
-			BatterySOC:       0.6,
-			Profit:           2.5,
-			ImportPrice:      0.1,
-			ExportPrice:      0.05,
-			SolarForecast:    15.0,
-			LoadForecast:     10.0,
-			CloudCoverage:    30.0,
-			WeatherSymbol:    "clearsky_day",
+			Hour:                 0,
+			Timestamp:            now + 3600,
+			BatteryCharge:        10.5,
+			BatteryChargeFromPV:  10.5,
+			BatteryChargeFromGrid: 5.0,
+			BatteryDischarge:     0,
+			GridImport:           5.0,
+			GridExport:           0,
+			BatterySOC:           0.6,
+			Profit:               2.5,
+			ImportPrice:          0.1,
+			ExportPrice:          0.05,
+			SolarForecast:        15.0,
+			LoadForecast:         10.0,
+			CloudCoverage:        30.0,
+			WeatherSymbol:        "clearsky_day",
 		},
 		{
-			Hour:             1,
-			Timestamp:        now + 7200,
-			BatteryCharge:    0,
-			BatteryDischarge: 8.0,
-			GridImport:       0,
-			GridExport:       3.0,
-			BatterySOC:       0.5,
-			Profit:           3.2,
-			ImportPrice:      0.12,
-			ExportPrice:      0.06,
-			SolarForecast:    20.0,
-			LoadForecast:     12.0,
-			CloudCoverage:    10.0,
-			WeatherSymbol:    "fair_day",
+			Hour:                 1,
+			Timestamp:            now + 7200,
+			BatteryCharge:        0,
+			BatteryChargeFromPV:  0,
+			BatteryChargeFromGrid: 0,
+			BatteryDischarge:     8.0,
+			GridImport:           0,
+			GridExport:           3.0,
+			BatterySOC:           0.5,
+			Profit:               3.2,
+			ImportPrice:          0.12,
+			ExportPrice:          0.06,
+			SolarForecast:        20.0,
+			LoadForecast:         12.0,
+			CloudCoverage:        10.0,
+			WeatherSymbol:        "fair_day",
 		},
 	}
 
@@ -102,6 +106,12 @@ func TestMPCPersistence_SaveAndLoad(t *testing.T) {
 		}
 		if decision.BatteryCharge != decisions[i].BatteryCharge {
 			t.Errorf("Decision %d: expected battery_charge %.2f, got %.2f", i, decisions[i].BatteryCharge, decision.BatteryCharge)
+		}
+		if decision.BatteryChargeFromPV != decisions[i].BatteryChargeFromPV {
+			t.Errorf("Decision %d: expected battery_charge_from_pv %.2f, got %.2f", i, decisions[i].BatteryChargeFromPV, decision.BatteryChargeFromPV)
+		}
+		if decision.BatteryChargeFromGrid != decisions[i].BatteryChargeFromGrid {
+			t.Errorf("Decision %d: expected battery_charge_from_grid %.2f, got %.2f", i, decisions[i].BatteryChargeFromGrid, decision.BatteryChargeFromGrid)
 		}
 		if decision.Profit != decisions[i].Profit {
 			t.Errorf("Decision %d: expected profit %.2f, got %.2f", i, decisions[i].Profit, decision.Profit)
@@ -238,10 +248,10 @@ func TestMPCPersistence_LoadOnlyFutureDecisions(t *testing.T) {
 	// Insert directly to test load filtering
 	for _, d := range decisions {
 		_, err := db.Exec(`
-			INSERT INTO mpc_decisions (timestamp, hour, battery_charge, battery_discharge,
-				grid_import, grid_export, battery_soc, profit, import_price, export_price,
-				solar_forecast, load_forecast)
-			VALUES ($1, $2, 0, 0, 0, 0, 0.5, $3, 0.1, 0.05, 10, 5)
+			INSERT INTO mpc_decisions (timestamp, hour, battery_charge, battery_charge_from_pv,
+				battery_charge_from_grid, battery_discharge, grid_import, grid_export, battery_soc,
+				profit, import_price, export_price, solar_forecast, load_forecast)
+			VALUES ($1, $2, 0, 0, 0, 0, 0, 0, 0.5, $3, 0.1, 0.05, 10, 5)
 		`, d.Timestamp, d.Hour, d.Profit)
 		if err != nil {
 			t.Fatalf("Failed to insert decision: %v", err)
@@ -299,10 +309,10 @@ func TestMPCPersistence_UniqueTimestamp(t *testing.T) {
 
 	// Insert first decision
 	_, err = db.Exec(`
-		INSERT INTO mpc_decisions (timestamp, hour, battery_charge, battery_discharge,
-			grid_import, grid_export, battery_soc, profit, import_price, export_price,
-			solar_forecast, load_forecast)
-		VALUES ($1, 0, 10, 0, 5, 0, 0.6, 2.5, 0.1, 0.05, 15, 10)
+		INSERT INTO mpc_decisions (timestamp, hour, battery_charge, battery_charge_from_pv,
+			battery_charge_from_grid, battery_discharge, grid_import, grid_export, battery_soc,
+			profit, import_price, export_price, solar_forecast, load_forecast)
+		VALUES ($1, 0, 10, 10, 0, 0, 5, 0, 0.6, 2.5, 0.1, 0.05, 15, 10)
 	`, timestamp)
 	if err != nil {
 		t.Fatalf("Failed to insert first decision: %v", err)
@@ -310,10 +320,10 @@ func TestMPCPersistence_UniqueTimestamp(t *testing.T) {
 
 	// Try to insert duplicate timestamp (should be handled by UPSERT in saveMPCDecisions)
 	_, err = db.Exec(`
-		INSERT INTO mpc_decisions (timestamp, hour, battery_charge, battery_discharge,
-			grid_import, grid_export, battery_soc, profit, import_price, export_price,
-			solar_forecast, load_forecast)
-		VALUES ($1, 1, 20, 0, 10, 0, 0.7, 5.0, 0.12, 0.06, 20, 12)
+		INSERT INTO mpc_decisions (timestamp, hour, battery_charge, battery_charge_from_pv,
+			battery_charge_from_grid, battery_discharge, grid_import, grid_export, battery_soc,
+			profit, import_price, export_price, solar_forecast, load_forecast)
+		VALUES ($1, 1, 20, 20, 0, 0, 10, 0, 0.7, 5.0, 0.12, 0.06, 20, 12)
 		ON CONFLICT (timestamp) DO UPDATE SET
 			hour = EXCLUDED.hour,
 			profit = EXCLUDED.profit

@@ -32,14 +32,16 @@ type TimeSlot struct {
 
 // ControlDecision represents the optimal control for one time slot
 type ControlDecision struct {
-	Hour             int
-	Timestamp        int64   // Unix timestamp when this time slot begins
-	BatteryCharge    float64 // kW (positive = charging)
-	BatteryDischarge float64 // kW (positive = discharging)
-	GridImport       float64 // kW (positive = importing)
-	GridExport       float64 // kW (positive = exporting)
-	BatterySOC       float64 // percentage (0-1)
-	Profit           float64 // $ for this hour
+	Hour                 int
+	Timestamp            int64   // Unix timestamp when this time slot begins
+	BatteryCharge        float64 // kW (positive = charging) - DEPRECATED: use BatteryChargeFromPV + BatteryChargeFromGrid
+	BatteryChargeFromPV  float64 // kW (positive = charging from PV surplus)
+	BatteryChargeFromGrid float64 // kW (positive = charging from grid)
+	BatteryDischarge     float64 // kW (positive = discharging)
+	GridImport           float64 // kW (positive = importing)
+	GridExport           float64 // kW (positive = exporting)
+	BatterySOC           float64 // percentage (0-1)
+	Profit               float64 // $ for this hour
 	// Forecast data used for this decision
 	ImportPrice   float64 // $/kWh
 	ExportPrice   float64 // $/kWh
@@ -66,11 +68,39 @@ func NewController(config SystemConfig, horizon int, initialSOC float64) *Contro
 }
 
 // Optimize finds the optimal control strategy using dynamic programming
+// It runs two optimizations: one with solar forecast and one without (grid-only)
+// Then splits the BatteryCharge into BatteryChargeFromPV and BatteryChargeFromGrid
 func (mpc *Controller) Optimize(forecast []TimeSlot) []ControlDecision {
 	if len(forecast) == 0 {
 		return nil
 	}
 
+	// Run optimization with full solar forecast
+	decisionsWithSolar := mpc.optimizeWithForecast(forecast, true)
+
+	// Run optimization without solar (grid-only scenario)
+	decisionsWithoutSolar := mpc.optimizeWithForecast(forecast, false)
+
+	// Combine results: split BatteryCharge into PV and Grid components
+	finalDecisions := make([]ControlDecision, len(decisionsWithSolar))
+	for i := range decisionsWithSolar {
+		finalDecisions[i] = decisionsWithSolar[i]
+
+		// BatteryChargeFromPV is the charge power when solar is available
+		finalDecisions[i].BatteryChargeFromPV = decisionsWithSolar[i].BatteryCharge
+
+		// BatteryChargeFromGrid is the charge power when solar is zero
+		finalDecisions[i].BatteryChargeFromGrid = decisionsWithoutSolar[i].BatteryCharge
+
+		// Keep total BatteryCharge for backward compatibility
+		finalDecisions[i].BatteryCharge = decisionsWithSolar[i].BatteryCharge
+	}
+
+	return finalDecisions
+}
+
+// optimizeWithForecast performs the actual optimization with optional solar forecast
+func (mpc *Controller) optimizeWithForecast(forecast []TimeSlot, includeSolar bool) []ControlDecision {
 	// Use dynamic programming for optimization
 	// State: SOC level, Time: hour
 	// We'll discretize SOC into steps for tractability
@@ -100,6 +130,9 @@ func (mpc *Controller) Optimize(forecast []TimeSlot) []ControlDecision {
 	// Forward pass - build DP table
 	for t := range forecast {
 		slot := forecast[t]
+		if !includeSolar {
+			slot.SolarForecast = 0
+		}
 
 		for socIdx := 0; socIdx <= socSteps; socIdx++ {
 			if math.IsInf(dp[t][socIdx].profit, -1) {

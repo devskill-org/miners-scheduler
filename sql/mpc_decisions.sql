@@ -2,6 +2,8 @@ CREATE TABLE mpc_decisions (
     timestamp BIGINT PRIMARY KEY,
     hour INTEGER NOT NULL,
     battery_charge NUMERIC NOT NULL,
+    battery_charge_from_pv NUMERIC NOT NULL DEFAULT 0,
+    battery_charge_from_grid NUMERIC NOT NULL DEFAULT 0,
     battery_discharge NUMERIC NOT NULL,
     grid_import NUMERIC NOT NULL,
     grid_export NUMERIC NOT NULL,
@@ -18,7 +20,9 @@ CREATE TABLE mpc_decisions (
 -- Column descriptions:
 -- timestamp: Unix timestamp when this time slot begins (PRIMARY KEY)
 -- hour: Hour index in the optimization horizon (0-based)
--- battery_charge: Battery charging power in kW (positive = charging)
+-- battery_charge: Battery charging power in kW (positive = charging) - DEPRECATED: use battery_charge_from_pv + battery_charge_from_grid
+-- battery_charge_from_pv: Battery charging power from PV surplus in kW
+-- battery_charge_from_grid: Battery charging power from grid in kW (zero solar scenario)
 -- battery_discharge: Battery discharging power in kW (positive = discharging)
 -- grid_import: Grid import power in kW (positive = importing)
 -- grid_export: Grid export power in kW (positive = exporting)

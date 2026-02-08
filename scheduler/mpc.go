@@ -450,8 +450,8 @@ func (s *MinerScheduler) estimateLoadForecast(hourlyPrice float64, priceLimit fl
 // executeMPCDecision executes the first MPC control decision
 func (s *MinerScheduler) executeMPCDecision(decision *mpc.ControlDecision, dryRun bool) error {
 	if dryRun {
-		s.logger.Printf("DRY-RUN: Would execute MPC decision - Charge: %.1f kW, Discharge: %.1f kW, Import: %.1f kW, Export: %.1f kW",
-			decision.BatteryCharge, decision.BatteryDischarge, decision.GridImport, decision.GridExport)
+		s.logger.Printf("DRY-RUN: Would execute MPC decision - ChargeFromPV: %.1f kW, ChargeFromGrid: %.1f kW, Discharge: %.1f kW, Import: %.1f kW, Export: %.1f kW",
+			decision.BatteryChargeFromPV, decision.BatteryChargeFromGrid, decision.BatteryDischarge, decision.GridImport, decision.GridExport)
 		return nil
 	}
 
@@ -473,12 +473,23 @@ func (s *MinerScheduler) executeMPCDecision(decision *mpc.ControlDecision, dryRu
 	// Determine control mode based on decision
 	var mode uint16
 
-	if decision.BatteryCharge > 0.01 {
+	if decision.BatteryChargeFromPV > 0.01 || decision.BatteryChargeFromGrid > 0.01 {
 		// Battery should charge
-		// Mode 4: Command charging (PV first) - charge from PV, then grid if needed
-		mode = 4
-		chargeLimit := decision.BatteryCharge
-		s.logger.Printf("Setting battery to CHARGE mode: %.1f kW", chargeLimit)
+		// Use BatteryChargeFromPV as the charge limit
+		chargeLimit := decision.BatteryChargeFromPV
+		
+		// Decide mode based on whether grid charging is needed
+		if decision.BatteryChargeFromGrid > 0.01 {
+			// Mode 4: Command charging (PV first, then grid) - charge from PV and grid if needed
+			mode = 4
+			s.logger.Printf("Setting battery to CHARGE mode (PV + Grid): ChargeFromPV: %.1f kW, ChargeFromGrid: %.1f kW",
+				decision.BatteryChargeFromPV, decision.BatteryChargeFromGrid)
+		} else {
+			// Mode 2: Self-use mode - charge from PV surplus only
+			mode = 2
+			s.logger.Printf("Setting battery to CHARGE mode (PV only): ChargeFromPV: %.1f kW",
+				decision.BatteryChargeFromPV)
+		}
 
 		// Set Remote EMS control mode
 		if err := client.SetRemoteEMSMode(mode); err != nil {
@@ -530,8 +541,8 @@ func (s *MinerScheduler) executeMPCDecision(decision *mpc.ControlDecision, dryRu
 		}
 	}
 
-	s.logger.Printf("Successfully executed MPC decision - Mode: %d, SOC: %.1f%%, GridImport: %.1f kW, GridExport: %.1f kW",
-		mode, decision.BatterySOC*100, decision.GridImport, decision.GridExport)
+	s.logger.Printf("Successfully executed MPC decision - Mode: %d, SOC: %.1f%%, ChargeFromPV: %.1f kW, ChargeFromGrid: %.1f kW, Discharge: %.1f kW, GridImport: %.1f kW, GridExport: %.1f kW",
+		mode, decision.BatterySOC*100, decision.BatteryChargeFromPV, decision.BatteryChargeFromGrid, decision.BatteryDischarge, decision.GridImport, decision.GridExport)
 
 	return nil
 }
