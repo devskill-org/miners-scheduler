@@ -441,7 +441,7 @@ body {
 
 .mpc-table th:not(:first-child),
 .mpc-table td:not(:first-child) {
-    width: 25px;
+    width: 30px;
     text-align: center;
 }
 

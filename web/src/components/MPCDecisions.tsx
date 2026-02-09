@@ -21,8 +21,9 @@ const formatTimestamp = (timestamp: number): string => {
   const month = date.getMonth() + 1;
   const day = date.getDate();
   const hour = date.getHours().toString().padStart(2, "0");
+  const minute = date.getMinutes().toString().padStart(2, "0");
 
-  return `${month}/${day} ${hour}`;
+  return `${month}/${day} ${hour}:${minute}`;
 };
 
 // Helper function to convert weather symbol to emoji
@@ -126,46 +127,52 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
   }, []);
 
   // Callback ref to create chart when div is mounted
-  const chartRef = useCallback((node: HTMLDivElement | null) => {
-    if (!node) {
-      return;
-    }
+  const chartRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (!node) {
+        return;
+      }
 
-    // If chart already exists, just return
-    if (chartInstanceRef.current) {
-      return;
-    }
+      // If chart already exists, just return
+      if (chartInstanceRef.current) {
+        return;
+      }
 
-    // Add a small delay to ensure container is properly sized
-    setTimeout(() => {
-      // Ensure we have a valid width
-      const width = node.clientWidth || node.parentElement?.clientWidth || 800;
+      // Add a small delay to ensure container is properly sized
+      setTimeout(() => {
+        // Ensure we have a valid width
+        const width =
+          node.clientWidth || node.parentElement?.clientWidth || 800;
 
-      const opts: uPlot.Options = {
-        width: width,
-        height: 400,
-      title: "Price Trends & MPC Actions",
-      tzDate: (ts) => new Date(ts * 1000),
-      padding: [25, 20, 0, 0],
-      plugins: [
-        {
-          hooks: {
-            setCursor: (u) => {
-              const tooltip = tooltipRef.current;
-              if (!tooltip) return;
+        const opts: uPlot.Options = {
+          width: width,
+          height: 400,
+          title: "Price Trends & MPC Actions",
+          tzDate: (ts) => new Date(ts * 1000),
+          padding: [25, 20, 0, 0],
+          plugins: [
+            {
+              hooks: {
+                setCursor: (u) => {
+                  const tooltip = tooltipRef.current;
+                  if (!tooltip) return;
 
-              const { left, top, idx } = u.cursor;
+                  const { left, top, idx } = u.cursor;
 
-              if (idx == null || idx < 0 || idx >= decisionsRef.current.length) {
-                tooltip.style.display = "none";
-                return;
-              }
+                  if (
+                    idx == null ||
+                    idx < 0 ||
+                    idx >= decisionsRef.current.length
+                  ) {
+                    tooltip.style.display = "none";
+                    return;
+                  }
 
-              const decision = decisionsRef.current[idx];
-              const batteryAction = getBatteryAction(decision);
-              const gridAction = getGridAction(decision);
+                  const decision = decisionsRef.current[idx];
+                  const batteryAction = getBatteryAction(decision);
+                  const gridAction = getGridAction(decision);
 
-              tooltip.innerHTML = `
+                  tooltip.innerHTML = `
                 <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid var(--color-border); padding-bottom: 4px;">
                   ${formatTimestamp(decision.timestamp)}
                 </div>
@@ -208,271 +215,284 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
                 </div>
               `;
 
-              tooltip.style.display = "block";
+                  tooltip.style.display = "block";
 
-              // Position tooltip
-              const chartRect = u.root.getBoundingClientRect();
-              const tooltipRect = tooltip.getBoundingClientRect();
+                  // Position tooltip
+                  const chartRect = u.root.getBoundingClientRect();
+                  const tooltipRect = tooltip.getBoundingClientRect();
 
-              let tooltipLeft = left! + 10;
-              let tooltipTop = top! + 10;
+                  let tooltipLeft = left! + 10;
+                  let tooltipTop = top! + 10;
 
-              // Keep tooltip within chart bounds
-              if (tooltipLeft + tooltipRect.width > chartRect.width) {
-                tooltipLeft = left! - tooltipRect.width - 10;
-              }
-
-              if (tooltipTop + tooltipRect.height > chartRect.height) {
-                tooltipTop = chartRect.height - tooltipRect.height - 10;
-              }
-
-              tooltip.style.left = `${tooltipLeft}px`;
-              tooltip.style.top = `${tooltipTop}px`;
-            },
-            draw: (u) => {
-              // Draw candlesticks with battery action colors and grid action indicators
-              const ctx = u.ctx;
-              if (!ctx) return;
-
-              ctx.save();
-
-              const xdata = u.data[0];
-              const open = u.data[1];
-              const high = u.data[2];
-              const low = u.data[3];
-              const close = u.data[4];
-
-              const bodyMaxWidth = 16;
-
-              // Draw candlesticks
-              for (let i = 0; i < decisionsRef.current.length; i++) {
-                const xVal = xdata[i];
-                const yOpen = open[i];
-                const yHigh = high[i];
-                const yLow = low[i];
-                const yClose = close[i];
-
-                if (
-                  xVal == null ||
-                  yOpen == null ||
-                  yHigh == null ||
-                  yLow == null ||
-                  yClose == null
-                ) {
-                  continue;
-                }
-
-                const x = Math.round(u.valToPos(xVal, "x", true) ?? 0);
-                const yO = Math.round(u.valToPos(yOpen, "y", true) ?? 0);
-                const yH = Math.round(u.valToPos(yHigh, "y", true) ?? 0);
-                const yL = Math.round(u.valToPos(yLow, "y", true) ?? 0);
-                const yC = Math.round(u.valToPos(yClose, "y", true) ?? 0);
-
-                const width = Math.min(
-                  bodyMaxWidth,
-                  Math.max(3, u.bbox.width / xdata.length - 2),
-                );
-
-                // Draw wick (high-low line)
-                ctx.strokeStyle = "#f1f5f9";
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(x, yL);
-                ctx.lineTo(x, yH);
-                ctx.stroke();
-
-                // Draw body with battery action color
-                const bodyTop = Math.min(yO, yC);
-                const bodyHeight = Math.abs(yO - yC);
-
-                const decision = decisionsRef.current[i];
-                const batteryAction = getBatteryAction(decision);
-
-                if (batteryAction.action === "charge") {
-                  ctx.fillStyle = "#ea580c"; // Orange for charge
-                } else if (batteryAction.action === "discharge") {
-                  ctx.fillStyle = "#16a34a"; // Green for discharge
-                } else {
-                  ctx.fillStyle = "#94a3b8"; // Gray for idle
-                }
-
-                ctx.fillRect(x - width / 2, bodyTop, width, bodyHeight || 1);
-
-                // Draw border
-                ctx.strokeStyle = "#f1f5f9";
-                ctx.lineWidth = 1;
-                ctx.strokeRect(x - width / 2, bodyTop, width, bodyHeight || 1);
-              }
-
-              // Draw grid action indicators
-              ctx.font = "bold 16px sans-serif";
-
-              for (let i = 0; i < decisionsRef.current.length; i++) {
-                const decision = decisionsRef.current[i];
-                const gridAction = getGridAction(decision);
-
-                const cx = u.valToPos(decision.timestamp, "x", true);
-                const cy = u.valToPos(highsRef.current[i], "y", true);
-
-                if (cx && cy) {
-                  // Draw grid action indicator with bigger arrows
-                  if (gridAction.action === "export") {
-                    ctx.fillStyle = "#16a34a";
-                    ctx.fillText("↑", cx + 6, cy - 10);
-                  } else if (gridAction.action === "import") {
-                    ctx.fillStyle = "#ea580c";
-                    ctx.fillText("↓", cx + 6, cy - 10);
+                  // Keep tooltip within chart bounds
+                  if (tooltipLeft + tooltipRect.width > chartRect.width) {
+                    tooltipLeft = left! - tooltipRect.width - 10;
                   }
-                }
-              }
 
-              ctx.restore();
+                  if (tooltipTop + tooltipRect.height > chartRect.height) {
+                    tooltipTop = chartRect.height - tooltipRect.height - 10;
+                  }
+
+                  tooltip.style.left = `${tooltipLeft}px`;
+                  tooltip.style.top = `${tooltipTop}px`;
+                },
+                draw: (u) => {
+                  // Draw candlesticks with battery action colors and grid action indicators
+                  const ctx = u.ctx;
+                  if (!ctx) return;
+
+                  ctx.save();
+
+                  const xdata = u.data[0];
+                  const open = u.data[1];
+                  const high = u.data[2];
+                  const low = u.data[3];
+                  const close = u.data[4];
+
+                  const bodyMaxWidth = 16;
+
+                  // Draw candlesticks
+                  for (let i = 0; i < decisionsRef.current.length; i++) {
+                    const xVal = xdata[i];
+                    const yOpen = open[i];
+                    const yHigh = high[i];
+                    const yLow = low[i];
+                    const yClose = close[i];
+
+                    if (
+                      xVal == null ||
+                      yOpen == null ||
+                      yHigh == null ||
+                      yLow == null ||
+                      yClose == null
+                    ) {
+                      continue;
+                    }
+
+                    const x = Math.round(u.valToPos(xVal, "x", true) ?? 0);
+                    const yO = Math.round(u.valToPos(yOpen, "y", true) ?? 0);
+                    const yH = Math.round(u.valToPos(yHigh, "y", true) ?? 0);
+                    const yL = Math.round(u.valToPos(yLow, "y", true) ?? 0);
+                    const yC = Math.round(u.valToPos(yClose, "y", true) ?? 0);
+
+                    const width = Math.min(
+                      bodyMaxWidth,
+                      Math.max(3, u.bbox.width / xdata.length - 2),
+                    );
+
+                    // Draw wick (high-low line)
+                    ctx.strokeStyle = "#f1f5f9";
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(x, yL);
+                    ctx.lineTo(x, yH);
+                    ctx.stroke();
+
+                    // Draw body with battery action color
+                    const bodyTop = Math.min(yO, yC);
+                    const bodyHeight = Math.abs(yO - yC);
+
+                    const decision = decisionsRef.current[i];
+                    const batteryAction = getBatteryAction(decision);
+
+                    if (batteryAction.action === "charge") {
+                      ctx.fillStyle = "#ea580c"; // Orange for charge
+                    } else if (batteryAction.action === "discharge") {
+                      ctx.fillStyle = "#16a34a"; // Green for discharge
+                    } else {
+                      ctx.fillStyle = "#94a3b8"; // Gray for idle
+                    }
+
+                    ctx.fillRect(
+                      x - width / 2,
+                      bodyTop,
+                      width,
+                      bodyHeight || 1,
+                    );
+
+                    // Draw border
+                    ctx.strokeStyle = "#f1f5f9";
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(
+                      x - width / 2,
+                      bodyTop,
+                      width,
+                      bodyHeight || 1,
+                    );
+                  }
+
+                  // Draw grid action indicators
+                  ctx.font = "bold 16px sans-serif";
+
+                  for (let i = 0; i < decisionsRef.current.length; i++) {
+                    const decision = decisionsRef.current[i];
+                    const gridAction = getGridAction(decision);
+
+                    const cx = u.valToPos(decision.timestamp, "x", true);
+                    const cy = u.valToPos(highsRef.current[i], "y", true);
+
+                    if (cx && cy) {
+                      // Draw grid action indicator with bigger arrows
+                      if (gridAction.action === "export") {
+                        ctx.fillStyle = "#16a34a";
+                        ctx.fillText("↑", cx + 6, cy - 10);
+                      } else if (gridAction.action === "import") {
+                        ctx.fillStyle = "#ea580c";
+                        ctx.fillText("↓", cx + 6, cy - 10);
+                      }
+                    }
+                  }
+
+                  ctx.restore();
+                },
+              },
+            },
+          ],
+          scales: {
+            x: {
+              time: true,
+              range: (_u, min, max) => {
+                const timeRange = max - min;
+                const padding = timeRange * 0.02; // 2% padding on each side
+                return [min, max + padding];
+              },
+            },
+            y: {
+              range: (_u, min, max) => {
+                // uPlot's auto-scaling only considers visible series, but our candlestick
+                // series are hidden. We need to manually calculate from all data.
+                const allHighs = highsRef.current || [];
+                const allLows =
+                  decisionsRef.current?.map((d) => d.export_price * 1000) || [];
+
+                if (allHighs.length === 0) {
+                  return [min, max + 100];
+                }
+
+                const actualMax = Math.max(...allHighs);
+                const actualMin = Math.min(...allLows);
+                const range = actualMax - actualMin;
+                const padding = range * 0.1; // 10% padding
+
+                return [actualMin - padding * 0.5, actualMax + padding];
+              },
             },
           },
-        },
-      ],
-      scales: {
-        x: {
-          time: true,
-          range: (_u, min, max) => {
-            const timeRange = max - min;
-            const padding = timeRange * 0.02; // 2% padding on each side
-            return [min, max + padding];
+          axes: [
+            {
+              stroke: "#94a3b8",
+              grid: {
+                show: true,
+                stroke: "#334155",
+                width: 1,
+              },
+              ticks: {
+                stroke: "#334155",
+              },
+              values: (_u, vals) =>
+                vals.map((v) => {
+                  const date = new Date(v * 1000);
+                  return date
+                    .toLocaleString("en-US", {
+                      month: "numeric",
+                      day: "numeric",
+                      hour: "2-digit",
+                      hour12: false,
+                    })
+                    .replace(/,/, "");
+                }),
+            },
+            {
+              stroke: "#94a3b8",
+              label: "Price (€/MWh)",
+              labelSize: 30,
+              labelFont: "12px sans-serif",
+              size: 70,
+              gap: 10,
+              grid: {
+                show: true,
+                stroke: "#334155",
+                width: 1,
+              },
+              ticks: {
+                stroke: "#334155",
+              },
+              values: (_u, vals) => vals.map((v) => v.toFixed(2)),
+            },
+          ],
+          series: [
+            {
+              label: "Time",
+            },
+            {
+              label: "Export (Open)",
+              stroke: "#f1f5f9",
+              width: 0,
+              points: { show: false },
+            },
+            {
+              label: "High (Import)",
+              stroke: "#f1f5f9",
+              width: 0,
+              points: { show: false },
+              show: false,
+            },
+            {
+              label: "Low (Export)",
+              stroke: "#f1f5f9",
+              width: 0,
+              points: { show: false },
+              show: false,
+            },
+            {
+              label: "Import (Close)",
+              stroke: "#f1f5f9",
+              width: 0,
+              points: { show: false },
+              show: false,
+            },
+          ],
+          cursor: {
+            points: {
+              show: false,
+            },
+            drag: {
+              x: false,
+              y: false,
+            },
+            sync: {
+              key: "mpc",
+            },
           },
-        },
-        y: {
-          range: (_u, min, max) => {
-            // uPlot's auto-scaling only considers visible series, but our candlestick
-            // series are hidden. We need to manually calculate from all data.
-            const allHighs = highsRef.current || [];
-            const allLows = decisionsRef.current?.map(d => d.export_price * 1000) || [];
-
-            if (allHighs.length === 0) {
-              return [min, max + 100];
-            }
-
-            const actualMax = Math.max(...allHighs);
-            const actualMin = Math.min(...allLows);
-            const range = actualMax - actualMin;
-            const padding = range * 0.1; // 10% padding
-
-            return [actualMin - padding * 0.5, actualMax + padding];
+          legend: {
+            show: false,
           },
-        },
-      },
-      axes: [
-        {
-          stroke: "#94a3b8",
-          grid: {
-            show: true,
-            stroke: "#334155",
-            width: 1,
-          },
-          ticks: {
-            stroke: "#334155",
-          },
-          values: (_u, vals) =>
-            vals.map((v) => {
-              const date = new Date(v * 1000);
-              return date
-                .toLocaleString("en-US", {
-                  month: "numeric",
-                  day: "numeric",
-                  hour: "2-digit",
-                  hour12: false,
-                })
-                .replace(/,/, "");
-            }),
-        },
-        {
-          stroke: "#94a3b8",
-          label: "Price (€/MWh)",
-          labelSize: 30,
-          labelFont: "12px sans-serif",
-          size: 70,
-          gap: 10,
-          grid: {
-            show: true,
-            stroke: "#334155",
-            width: 1,
-          },
-          ticks: {
-            stroke: "#334155",
-          },
-          values: (_u, vals) => vals.map((v) => v.toFixed(2)),
-        },
-      ],
-      series: [
-        {
-          label: "Time",
-        },
-        {
-          label: "Export (Open)",
-          stroke: "#f1f5f9",
-          width: 0,
-          points: { show: false },
-        },
-        {
-          label: "High (Import)",
-          stroke: "#f1f5f9",
-          width: 0,
-          points: { show: false },
-          show: false,
-        },
-        {
-          label: "Low (Export)",
-          stroke: "#f1f5f9",
-          width: 0,
-          points: { show: false },
-          show: false,
-        },
-        {
-          label: "Import (Close)",
-          stroke: "#f1f5f9",
-          width: 0,
-          points: { show: false },
-          show: false,
-        },
-      ],
-      cursor: {
-        points: {
-          show: false,
-        },
-        drag: {
-          x: false,
-          y: false,
-        },
-        sync: {
-          key: "mpc",
-        },
-      },
-      legend: {
-        show: false,
-      },
-      };
+        };
 
-      // Create chart with empty initial data
-      const emptyData: uPlot.AlignedData = [[], [], [], [], []];
-      const chart = new uPlot(opts, emptyData, node);
-      chartInstanceRef.current = chart;
+        // Create chart with empty initial data
+        const emptyData: uPlot.AlignedData = [[], [], [], [], []];
+        const chart = new uPlot(opts, emptyData, node);
+        chartInstanceRef.current = chart;
 
-      // Mark chart as ready
-      setChartReady(true);
+        // Mark chart as ready
+        setChartReady(true);
 
-      // Add ResizeObserver to handle container size changes
-      const resizeObserver = new ResizeObserver(() => {
-        if (chartInstanceRef.current && node.clientWidth > 0) {
-          const newWidth = node.clientWidth;
-          chartInstanceRef.current.setSize({ width: newWidth, height: 400 });
-        }
-      });
+        // Add ResizeObserver to handle container size changes
+        const resizeObserver = new ResizeObserver(() => {
+          if (chartInstanceRef.current && node.clientWidth > 0) {
+            const newWidth = node.clientWidth;
+            chartInstanceRef.current.setSize({ width: newWidth, height: 400 });
+          }
+        });
 
-      resizeObserver.observe(node);
+        resizeObserver.observe(node);
 
-      // Store cleanup function
-      (node as any)._resizeObserver = resizeObserver;
-    }, 100); // 100ms delay to ensure DOM is ready
-  }, [getBatteryAction, getGridAction, getActionClass]);
+        // Store cleanup function
+        (node as any)._resizeObserver = resizeObserver;
+      }, 100); // 100ms delay to ensure DOM is ready
+    },
+    [getBatteryAction, getGridAction, getActionClass],
+  );
 
   // Cleanup on unmount
   useEffect(() => {
@@ -547,7 +567,9 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
       <div className="mpc-summary">
         <div className="mpc-summary-item">
           <span className="mpc-summary-label">Decisions:</span>
-          <span className="mpc-summary-value">{decisions.length} hours</span>
+          <span className="mpc-summary-value">
+            {decisions.length} intervals (15min)
+          </span>
         </div>
         <div className="mpc-summary-item">
           <span className="mpc-summary-label">Total Expected Profit:</span>
@@ -682,7 +704,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
               <tr>
                 <th>Metric</th>
                 {decisions.map((decision) => (
-                  <th key={decision.hour}>
+                  <th key={decision.timestamp}>
                     {formatTimestamp(decision.timestamp)}
                   </th>
                 ))}
@@ -694,7 +716,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
                 {decisions.map((decision) => {
                   const batteryAction = getBatteryAction(decision);
                   return (
-                    <td key={decision.hour}>
+                    <td key={decision.timestamp}>
                       <span className={getActionClass(batteryAction.action)}>
                         {batteryAction.power > 0
                           ? batteryAction.power.toFixed(1)
@@ -709,7 +731,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
                 {decisions.map((decision) => {
                   const gridAction = getGridAction(decision);
                   return (
-                    <td key={decision.hour}>
+                    <td key={decision.timestamp}>
                       <span className={getActionClass(gridAction.action)}>
                         {gridAction.power > 0
                           ? gridAction.power.toFixed(1)
@@ -722,7 +744,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
               <tr>
                 <th>SOC (%)</th>
                 {decisions.map((decision) => (
-                  <td key={decision.hour}>
+                  <td key={decision.timestamp}>
                     {(decision.battery_soc * 100).toFixed(1)}
                   </td>
                 ))}
@@ -731,7 +753,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
               <tr>
                 <th>Solar (kW)</th>
                 {decisions.map((decision) => (
-                  <td key={decision.hour}>
+                  <td key={decision.timestamp}>
                     {decision.solar_forecast.toFixed(1)}
                   </td>
                 ))}
@@ -739,7 +761,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
               <tr>
                 <th>Load (kW)</th>
                 {decisions.map((decision) => (
-                  <td key={decision.hour}>
+                  <td key={decision.timestamp}>
                     {decision.load_forecast.toFixed(1)}
                   </td>
                 ))}
@@ -747,7 +769,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
               <tr>
                 <th>Cloud (%)</th>
                 {decisions.map((decision) => (
-                  <td key={decision.hour}>
+                  <td key={decision.timestamp}>
                     {decision.cloud_coverage.toFixed(0)}
                   </td>
                 ))}
@@ -756,7 +778,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
                 <th>Weather</th>
                 {decisions.map((decision) => (
                   <td
-                    key={decision.hour}
+                    key={decision.timestamp}
                     title={decision.weather_symbol || "Unknown"}
                   >
                     {getWeatherIcon(decision.weather_symbol)}
@@ -766,7 +788,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
               <tr>
                 <th>Profit (€)</th>
                 {decisions.map((decision) => (
-                  <td key={decision.hour}>
+                  <td key={decision.timestamp}>
                     <span
                       className={
                         decision.profit >= 0 ? "value-success" : "value-error"

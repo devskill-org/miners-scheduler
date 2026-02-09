@@ -15,10 +15,9 @@ function getCurrentHour(): number {
 }
 
 // Helper function to generate timestamps (returns unix timestamp in seconds)
-function getTimestamp(hoursOffset: number = 0): number {
+function getTimestamp(minutesOffset: number = 0): number {
   const now = new Date();
-  now.setHours(now.getHours() + hoursOffset);
-  now.setMinutes(0);
+  now.setMinutes(now.getMinutes() + minutesOffset);
   now.setSeconds(0);
   now.setMilliseconds(0);
   return Math.floor(now.getTime() / 1000);
@@ -37,7 +36,10 @@ function generateSolarPower(hour: number): number {
 // Generate realistic battery state
 function generateBatteryState(hour: number) {
   const baseSOC = hour < 12 ? 0.3 + hour * 0.03 : 0.9 - (hour - 12) * 0.02;
-  const soc = Math.max(0.1, Math.min(0.95, baseSOC + Math.random() * 0.1 - 0.05));
+  const soc = Math.max(
+    0.1,
+    Math.min(0.95, baseSOC + Math.random() * 0.1 - 0.05),
+  );
 
   // Charging during day, discharging during evening (0-20 kW range)
   let power = 0;
@@ -88,28 +90,36 @@ function generateEVChargerState(hour: number) {
   return { power, soc: vehicleSOC };
 }
 
-// Generate electricity prices (€/kWh) - cached per hour to avoid frequent changes
-function generatePrice(hour: number): number {
-  // Return cached price if available for this hour
-  if (cachedPriceByHour[hour] !== undefined) {
-    return cachedPriceByHour[hour];
+// Generate electricity prices (€/kWh) with variations per 15-minute interval
+function generatePrice(hour: number, minute: number): number {
+  // Generate base price for the hour if not cached
+  if (cachedPriceByHour[hour] === undefined) {
+    // Generate base price based on time of day (0.10 to 1 EUR per kWh)
+    let basePrice: number;
+    if (hour >= 7 && hour < 9) {
+      basePrice = Math.random() * 0.3 + 0.6; // Morning peak: 0.60-0.90 €/kWh
+    } else if (hour >= 18 && hour < 21) {
+      basePrice = Math.random() * 0.4 + 0.6; // Evening peak: 0.60-1.00 €/kWh
+    } else if (hour >= 2 && hour < 6) {
+      basePrice = Math.random() * 0.2 + 0.1; // Night low: 0.10-0.30 €/kWh
+    } else {
+      basePrice = Math.random() * 0.3 + 0.3; // Normal: 0.30-0.60 €/kWh
+    }
+
+    // Cache the base price for this hour
+    cachedPriceByHour[hour] = basePrice;
   }
 
-  // Generate price based on time of day (0.10 to 1 EUR per kWh)
-  let price: number;
-  if (hour >= 7 && hour < 9) {
-    price = Math.random() * 0.30 + 0.60; // Morning peak: 0.60-0.90 €/kWh
-  } else if (hour >= 18 && hour < 21) {
-    price = Math.random() * 0.40 + 0.60; // Evening peak: 0.60-1.00 €/kWh
-  } else if (hour >= 2 && hour < 6) {
-    price = Math.random() * 0.20 + 0.10; // Night low: 0.10-0.30 €/kWh
-  } else {
-    price = Math.random() * 0.30 + 0.30; // Normal: 0.30-0.60 €/kWh
-  }
+  const basePrice = cachedPriceByHour[hour];
 
-  // Cache the generated price for this hour
-  cachedPriceByHour[hour] = price;
-  return price;
+  // Add random variation based on 15-minute interval (±10% of base price)
+  // Use minute value and hour to seed random variation
+  const intervalIndex = Math.floor(minute / 15); // 0, 1, 2, or 3
+  const seed = (hour * 7 + intervalIndex * 17 + minute) * 9301 + 49297;
+  const pseudoRandom = ((seed * seed) % 233280) / 233280; // Value between 0 and 1
+  const variation = (pseudoRandom - 0.5) * 0.2; // ±10%
+
+  return basePrice * (1 + variation);
 }
 
 // Generate weather symbol codes
@@ -131,67 +141,85 @@ function getWeatherSymbol(hour: number): string {
   return symbols[Math.floor(Math.random() * 5)];
 }
 
-// Cache for MPC decisions (regenerate every hour)
+// Cache for MPC decisions (regenerate every 15 minutes)
 let cachedMPCDecisions: MPCDecisionInfo[] | null = null;
 let mpcCacheTimestamp: number = 0;
-const MPC_CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+const MPC_CACHE_DURATION = 15 * 60 * 1000; // 15 minutes in milliseconds
 
 // Cache for miners data (regenerate every hour)
 let cachedMiners: Array<{ ip: string; status: string }> | null = null;
 let minersCacheTimestamp: number = 0;
 const MINERS_CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 
-// Cache for electricity prices (per hour)
+// Cache for electricity prices (base price per hour)
 const cachedPriceByHour: { [hour: number]: number } = {};
 
-// Generate MPC decisions for the next 24 hours
+// Generate MPC decisions for the next 24 hours in 15-minute intervals (96 decisions)
 function generateMPCDecisions(): MPCDecisionInfo[] {
   // Return cached decisions if still valid
   const now = Date.now();
-  if (cachedMPCDecisions && (now - mpcCacheTimestamp) < MPC_CACHE_DURATION) {
+  if (cachedMPCDecisions && now - mpcCacheTimestamp < MPC_CACHE_DURATION) {
     return cachedMPCDecisions;
   }
 
   // Generate fresh decisions
   const decisions: MPCDecisionInfo[] = [];
-  const currentHour = getCurrentHour();
+  const currentTime = new Date();
+  const currentMinute = currentTime.getMinutes();
+
+  // Calculate minutes to next 15-minute boundary (0, 15, 30, or 45)
+  const nextBoundary = Math.ceil(currentMinute / 15) * 15;
+  const minutesToNextBoundary = nextBoundary - currentMinute;
 
   // Start with current realistic battery SOC (as decimal 0-1)
   let currentSOC = Math.max(0.2, Math.min(0.8, 0.4 + Math.random() * 0.2));
 
-  for (let i = 0; i < 24; i++) {
-    const hour = (currentHour + i) % 24;
-    const timestamp = getTimestamp(i);
-    const solarForecast = generateSolarPower(hour); // Already in kW
-    const importPrice = generatePrice(hour);
+  // Generate 96 decisions (24 hours * 4 intervals per hour = 96 intervals)
+  for (let i = 0; i < 96; i++) {
+    const minutesOffset = minutesToNextBoundary + i * 15;
+    const totalMinutes = currentMinute + minutesOffset;
+    const hour = Math.floor(totalMinutes / 60) % 24;
+    const minute = totalMinutes % 60;
+    const timestamp = getTimestamp(minutesOffset);
+
+    // Interpolate solar power within the hour (more granular)
+    const solarForecast =
+      generateSolarPower(hour) *
+      (1 + (Math.sin((minute / 60) * Math.PI) * 0.15 - 0.075)); // ±7.5% variation within hour
+    const importPrice = generatePrice(hour, minute);
     const exportPrice = importPrice * 0.7; // Export typically lower than import
-    const loadForecast = generatePlantPower(hour); // Already in kW
+    const loadForecast =
+      generatePlantPower(hour) * (1 + Math.random() * 0.1 - 0.05); // ±5% variation
     const cloudCoverage = Math.random() * 100;
 
-    // Battery strategy based on prices and solar
+    // Battery strategy based on prices and solar (adjusted for 15-min intervals)
     let batteryCharge = 0;
     let batteryDischarge = 0;
 
     if (solarForecast > 50 && importPrice < 0.6 && currentSOC < 0.9) {
       // Charge battery during cheap hours with solar
       batteryCharge = Math.random() * 2 + 1;
-      currentSOC = Math.min(0.95, currentSOC + batteryCharge * 0.02);
+      currentSOC = Math.min(0.95, currentSOC + batteryCharge * 0.005); // Adjusted for 15-min interval
     } else if (importPrice > 0.8 && currentSOC > 0.2) {
       // Discharge during expensive hours
       batteryDischarge = Math.random() * 2 + 0.5;
-      currentSOC = Math.max(0.1, currentSOC - batteryDischarge * 0.02);
+      currentSOC = Math.max(0.1, currentSOC - batteryDischarge * 0.005); // Adjusted for 15-min interval
     } else {
       // Small fluctuations for idle state
-      currentSOC = Math.max(0.1, Math.min(0.95, currentSOC + Math.random() * 0.02 - 0.01));
+      currentSOC = Math.max(
+        0.1,
+        Math.min(0.95, currentSOC + Math.random() * 0.005 - 0.0025),
+      );
     }
 
     // Grid strategy - only import OR export, never both
     let gridImport = 0;
     let gridExport = 0;
-    
+
     // Determine net power flow: positive = surplus (export), negative = deficit (import)
-    const netPower = solarForecast - loadForecast + batteryDischarge - batteryCharge;
-    
+    const netPower =
+      solarForecast - loadForecast + batteryDischarge - batteryCharge;
+
     if (netPower > 0 && exportPrice > 0.05) {
       // Surplus power and reasonable export price - export to grid
       gridExport = Math.min(netPower, Math.random() * 40 + 20); // 20-60 kW max
@@ -199,11 +227,11 @@ function generateMPCDecisions(): MPCDecisionInfo[] {
       // Power deficit - import from grid
       gridImport = Math.abs(netPower) + Math.random() * 10; // Cover deficit + some margin
     }
-    
-    const profit = (gridExport * exportPrice - gridImport * importPrice) / 1000;
+
+    const profit = (gridExport * exportPrice - gridImport * importPrice) / 4000; // Divided by 4 for 15-min interval
 
     decisions.push({
-      hour,
+      hour: hour + minute / 60, // Fractional hour (e.g., 10.25 for 10:15)
       timestamp,
       battery_charge: batteryCharge,
       battery_discharge: batteryDischarge,
@@ -213,7 +241,7 @@ function generateMPCDecisions(): MPCDecisionInfo[] {
       profit,
       import_price: importPrice,
       export_price: exportPrice,
-      solar_forecast: solarForecast, // Already in kW
+      solar_forecast: solarForecast,
       load_forecast: loadForecast,
       cloud_coverage: cloudCoverage,
       weather_symbol: getWeatherSymbol(hour),
@@ -231,7 +259,7 @@ function generateMPCDecisions(): MPCDecisionInfo[] {
 function generateMiners() {
   // Return cached miners if still valid
   const now = Date.now();
-  if (cachedMiners && (now - minersCacheTimestamp) < MINERS_CACHE_DURATION) {
+  if (cachedMiners && now - minersCacheTimestamp < MINERS_CACHE_DURATION) {
     return cachedMiners;
   }
 
@@ -284,12 +312,14 @@ function getSolarAngle(): number {
  * Generate a complete mock WebSocket message
  */
 export function generateMockWebSocketMessage(): WebSocketMessage {
-  const hour = getCurrentHour();
+  const now = new Date();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
   const battery = generateBatteryState(hour);
   const evCharger = generateEVChargerState(hour);
   const sunTimes = getSunTimes();
   const miners = generateMiners();
-  const currentPrice = generatePrice(hour);
+  const currentPrice = generatePrice(hour, minute);
   const priceLimit = 75;
 
   const health: HealthResponse = {
@@ -356,7 +386,7 @@ export function generateMockWebSocketMessage(): WebSocketMessage {
  */
 export function createMockWebSocket(
   onMessage: (data: WebSocketMessage) => void,
-  interval: number = 10000
+  interval: number = 10000,
 ): { close: () => void } {
   // Send initial message immediately
   setTimeout(() => {

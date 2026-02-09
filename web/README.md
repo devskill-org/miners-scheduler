@@ -49,7 +49,7 @@ In demo mode:
 - Realistic simulated data updates every 10 seconds
 - Solar power, battery, grid, and device data reflect realistic daily patterns
 - Electricity prices vary based on time of day
-- MPC decisions are generated for the next 24 hours
+- MPC decisions are generated for the next 24 hours in 15-minute intervals (96 decisions)
 - All UI components work exactly as they would with a real backend
 
 ## Production Build
