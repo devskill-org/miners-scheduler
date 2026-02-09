@@ -116,10 +116,10 @@ The Energy Management System operates on multiple time scales:
 4. **Fault Detection**: Identifies and logs device issues
 
 ### Energy Optimization (15-minute intervals, configurable)
-1. **Price Updates**: Fetches current and forecasted electricity prices
+1. **Price Updates**: Fetches current and forecasted electricity prices at 15-minute intervals
 2. **Weather Forecast**: Updates solar production forecast
-3. **MPC Optimization**: Calculates optimal battery and load schedules for next 24-48 hours
-4. **Schedule Execution**: Implements optimized decisions for current period
+3. **MPC Optimization**: Calculates optimal battery and load schedules for next 24-48 hours using exact 15-minute price data (not hourly averages)
+4. **Schedule Execution**: Implements optimized decisions for current 15-minute period
 5. **Load Management**:
    - **Price below threshold**: Activate loads, prioritize self-consumption
    - **Price above threshold**: Deactivate non-essential loads, maximize export

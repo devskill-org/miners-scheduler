@@ -567,8 +567,8 @@ func (hs *WebServer) buildStatusData() map[string]any {
 		priceData["document_id"] = doc.MRID
 		priceData["created_at"] = doc.CreatedDateTime
 
-		if price, found := doc.LookupAveragePriceInHourByTime(time.Now()); found {
-			priceData["current_avg_price"] = price
+		if price, found := doc.LookupPriceByTime(time.Now()); found {
+			priceData["current_price"] = price
 			priceData["current"] = price
 			priceData["limit"] = hs.scheduler.GetConfig().PriceLimit
 		}

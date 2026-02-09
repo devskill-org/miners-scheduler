@@ -240,7 +240,7 @@ func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval t
 	s.mu.RUnlock()
 
 	if marketData != nil {
-		spotPrice, found := marketData.LookupAveragePriceInHourByTime(timestamp)
+		spotPrice, found := marketData.LookupPriceByTime(timestamp)
 		if found && spotPrice > 0 {
 			// Import cost: (spot price + operator fee + delivery fee) * energy in MWh
 			importPricePerMWh := spotPrice + config.ImportPriceOperatorFee + config.ImportPriceDeliveryFee

@@ -71,13 +71,13 @@ func (s *MinerScheduler) runPriceCheck(ctx context.Context) error {
 	s.logger.Printf("Starting price check task at %s", time.Now().Format(time.RFC3339))
 
 	// Step 1: Get current electricity price
-	currentPrice, err := s.getCurrentAvgPrice(ctx)
+	currentPrice, err := s.getCurrentPrice(ctx)
 	if err != nil {
 		s.logger.Printf("Error getting current price: %v", err)
 		return err
 	}
 
-	s.logger.Printf("Current hourly average electricity price: %.2f EUR/MWh", currentPrice)
+	s.logger.Printf("Current electricity price: %.2f EUR/MWh", currentPrice)
 	s.logger.Printf("Price limit: %.2f EUR/MWh", s.config.PriceLimit)
 
 	// Step 2: Manage miners based on price
@@ -90,8 +90,8 @@ func (s *MinerScheduler) runPriceCheck(ctx context.Context) error {
 	return nil
 }
 
-// getCurrentAvgPrice gets the current hourly average electricity price, downloading new data if needed
-func (s *MinerScheduler) getCurrentAvgPrice(ctx context.Context) (float64, error) {
+// getCurrentPrice gets the current electricity price at the exact time, downloading new data if needed
+func (s *MinerScheduler) getCurrentPrice(ctx context.Context) (float64, error) {
 	location, err := time.LoadLocation(s.config.Location)
 	if err != nil {
 		return 0, fmt.Errorf("failed to load location: %w", err)
@@ -104,7 +104,7 @@ func (s *MinerScheduler) getCurrentAvgPrice(ctx context.Context) (float64, error
 		return 0, fmt.Errorf("failed to get market prices: %w", err)
 	}
 
-	if price, found := marketData.LookupAveragePriceInHourByTime(now); found {
+	if price, found := marketData.LookupPriceByTime(now); found {
 		s.logger.Printf("Price found: %.2f EUR/MWh", price)
 		return price, nil
 	}

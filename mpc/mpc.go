@@ -18,35 +18,35 @@ type SystemConfig struct {
 	MaxGridExport          float64 // kW
 }
 
-// TimeSlot represents one hour of operation
+// TimeSlot represents one time period of operation (typically 15 minutes, configurable via check_price_interval)
 type TimeSlot struct {
 	Hour          int
 	Timestamp     int64   // Unix timestamp when this time slot begins
 	ImportPrice   float64 // $/kWh
 	ExportPrice   float64 // $/kWh
-	SolarForecast float64 // kW average for the hour
-	LoadForecast  float64 // kW average for the hour
+	SolarForecast float64 // kW average for the time period
+	LoadForecast  float64 // kW average for the time period
 	CloudCoverage float64 // % cloud coverage (0-100)
 	WeatherSymbol string  // weather condition symbol
 }
 
-// ControlDecision represents the optimal control for one time slot
+// ControlDecision represents the optimal control for one time slot (typically 15 minutes, configurable via check_price_interval)
 type ControlDecision struct {
-	Hour                 int
-	Timestamp            int64   // Unix timestamp when this time slot begins
-	BatteryCharge        float64 // kW (positive = charging) - DEPRECATED: use BatteryChargeFromPV + BatteryChargeFromGrid
-	BatteryChargeFromPV  float64 // kW (positive = charging from PV surplus)
+	Hour                  int
+	Timestamp             int64   // Unix timestamp when this time slot begins
+	BatteryCharge         float64 // kW (positive = charging) - DEPRECATED: use BatteryChargeFromPV + BatteryChargeFromGrid
+	BatteryChargeFromPV   float64 // kW (positive = charging from PV surplus)
 	BatteryChargeFromGrid float64 // kW (positive = charging from grid)
-	BatteryDischarge     float64 // kW (positive = discharging)
-	GridImport           float64 // kW (positive = importing)
-	GridExport           float64 // kW (positive = exporting)
-	BatterySOC           float64 // percentage (0-1)
-	Profit               float64 // $ for this hour
+	BatteryDischarge      float64 // kW (positive = discharging)
+	GridImport            float64 // kW (positive = importing)
+	GridExport            float64 // kW (positive = exporting)
+	BatterySOC            float64 // percentage (0-1)
+	Profit                float64 // $ for this time period
 	// Forecast data used for this decision
 	ImportPrice   float64 // $/kWh
 	ExportPrice   float64 // $/kWh
-	SolarForecast float64 // kW average for the hour
-	LoadForecast  float64 // kW average for the hour
+	SolarForecast float64 // kW average for the time period
+	LoadForecast  float64 // kW average for the time period
 	CloudCoverage float64 // % cloud coverage (0-100)
 	WeatherSymbol string  // weather condition symbol
 }
@@ -54,7 +54,7 @@ type ControlDecision struct {
 // Controller implements Model Predictive Control
 type Controller struct {
 	Config     SystemConfig
-	Horizon    int // hours to look ahead
+	Horizon    int // number of time periods to look ahead
 	CurrentSOC float64
 }
 

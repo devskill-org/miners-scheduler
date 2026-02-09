@@ -325,17 +325,6 @@ func (pmd *PublicationMarketData) LookupPriceByTime(t time.Time) (float64, bool)
 	return 0, false
 }
 
-// LookupAveragePriceInHourByTime searches all TimeSeries in the market data for the average price within the hour containing the given time.
-// Returns the first matching average price found and true, or 0 and false if no price is found in any TimeSeries for that hour.
-func (pmd *PublicationMarketData) LookupAveragePriceInHourByTime(t time.Time) (float64, bool) {
-	for _, timeSeries := range pmd.TimeSeries {
-		if avg, found := timeSeries.Period.averagePriceInHourByTime(t); found {
-			return avg, true
-		}
-	}
-	return 0, false
-}
-
 // GetPriceByTime returns the price for a specific time.
 // The price corresponds to the interval that contains the given time.
 // For example, if the period starts at 22:00 with hourly resolution:
@@ -410,44 +399,6 @@ func (p *Period) GetTimeRangeForPosition(position int) (start, end time.Time, va
 	}
 
 	return start, end, true
-}
-
-// averagePriceInHourByTime returns the average price for all intervals within the hour containing the given time.
-// If no intervals overlap with the hour, returns (0, false).
-func (p *Period) averagePriceInHourByTime(t time.Time) (float64, bool) {
-	// Find the hour boundaries for the given time
-	hourStart := t.Truncate(time.Hour)
-	hourEnd := hourStart.Add(time.Hour)
-
-	var sum float64
-	var count int
-
-	var checked *Point
-
-	for _, point := range p.Points {
-		start, end, valid := p.GetTimeRangeForPosition(point.Position)
-		if !valid {
-			continue
-		}
-		// Check if the interval overlaps with the hour
-		if (start.Before(hourEnd) && end.After(hourStart)) || (start.Equal(hourStart) && end.After(hourStart)) {
-			// correctly calculate average even if data point is missed when the price isn't changed
-			if checked != nil {
-				for position := checked.Position + 1; position < point.Position; position++ {
-					sum += checked.PriceAmount
-					count++
-				}
-			}
-			sum += point.PriceAmount
-			count++
-			checked = &point
-		}
-	}
-
-	if count == 0 {
-		return 0, false
-	}
-	return sum / float64(count), true
 }
 
 // DecodeEnergyPricesXML decodes the XML file and returns the parsed data
