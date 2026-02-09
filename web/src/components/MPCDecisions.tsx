@@ -87,10 +87,53 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [showTable, setShowTable] = useState(false);
   const [chartReady, setChartReady] = useState(false);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
   // Store decisions and derived data in refs so chart callbacks can access them
   const decisionsRef = useRef<MPCDecisionInfo[]>([]);
   const highsRef = useRef<number[]>([]);
+
+  // Check scroll position
+  const checkScroll = useCallback(() => {
+    const container = tableContainerRef.current;
+    if (container) {
+      setCanScrollLeft(container.scrollLeft > 0);
+      setCanScrollRight(
+        container.scrollLeft <
+          container.scrollWidth - container.clientWidth - 1,
+      );
+    }
+  }, []);
+
+  // Scroll table
+  const scrollTable = useCallback((direction: "left" | "right") => {
+    const container = tableContainerRef.current;
+    if (container) {
+      const scrollAmount = container.clientWidth * 0.8; // Scroll 80% of visible width
+      container.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth",
+      });
+    }
+  }, []);
+
+  // Check scroll on mount and when table is shown
+  useEffect(() => {
+    if (showTable) {
+      checkScroll();
+      const container = tableContainerRef.current;
+      if (container) {
+        container.addEventListener("scroll", checkScroll);
+        window.addEventListener("resize", checkScroll);
+        return () => {
+          container.removeEventListener("scroll", checkScroll);
+          window.removeEventListener("resize", checkScroll);
+        };
+      }
+    }
+  }, [showTable, checkScroll]);
 
   // Helper function to determine battery action
   const getBatteryAction = useCallback((decision: MPCDecisionInfo) => {
@@ -698,109 +741,285 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
       </div>
 
       {showTable && (
-        <div className="mpc-table-container">
-          <table className="mpc-table">
-            <thead>
-              <tr>
-                <th>Metric</th>
-                {decisions.map((decision) => (
-                  <th key={decision.timestamp}>
-                    {formatTimestamp(decision.timestamp)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th>Battery Action (kW)</th>
-                {decisions.map((decision) => {
-                  const batteryAction = getBatteryAction(decision);
-                  return (
-                    <td key={decision.timestamp}>
-                      <span className={getActionClass(batteryAction.action)}>
-                        {batteryAction.power > 0
-                          ? batteryAction.power.toFixed(1)
-                          : ""}
-                      </span>
-                    </td>
-                  );
-                })}
-              </tr>
-              <tr>
-                <th>Grid Action (kW)</th>
-                {decisions.map((decision) => {
-                  const gridAction = getGridAction(decision);
-                  return (
-                    <td key={decision.timestamp}>
-                      <span className={getActionClass(gridAction.action)}>
-                        {gridAction.power > 0
-                          ? gridAction.power.toFixed(1)
-                          : ""}
-                      </span>
-                    </td>
-                  );
-                })}
-              </tr>
-              <tr>
-                <th>SOC (%)</th>
-                {decisions.map((decision) => (
-                  <td key={decision.timestamp}>
-                    {(decision.battery_soc * 100).toFixed(1)}
-                  </td>
-                ))}
-              </tr>
+        <div style={{ position: "relative" }}>
+          {/* Scroll navigation buttons */}
+          {canScrollLeft && (
+            <button
+              onClick={() => scrollTable("left")}
+              style={{
+                position: "absolute",
+                left: "130px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                zIndex: 20,
+                backgroundColor: "var(--color-primary)",
+                color: "white",
+                border: "none",
+                borderRadius: "50%",
+                width: "40px",
+                height: "40px",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "20px",
+                fontWeight: "bold",
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-50%) scale(1.1)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(-50%) scale(1)";
+              }}
+            >
+              ←
+            </button>
+          )}
+          {canScrollRight && (
+            <button
+              onClick={() => scrollTable("right")}
+              style={{
+                position: "absolute",
+                right: "10px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                zIndex: 20,
+                backgroundColor: "var(--color-primary)",
+                color: "white",
+                border: "none",
+                borderRadius: "50%",
+                width: "40px",
+                height: "40px",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "20px",
+                fontWeight: "bold",
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-50%) scale(1.1)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(-50%) scale(1)";
+              }}
+            >
+              →
+            </button>
+          )}
+          <div className="mpc-table-container" ref={tableContainerRef}>
+            <table className="mpc-table">
+              <thead>
+                {/* Date row */}
+                <tr>
+                  <th rowSpan={3}>Metric</th>
+                  {(() => {
+                    const dateGroups: Array<{
+                      dateKey: string;
+                      count: number;
+                    }> = [];
+                    let currentDateKey: string | null = null;
 
-              <tr>
-                <th>Solar (kW)</th>
-                {decisions.map((decision) => (
-                  <td key={decision.timestamp}>
-                    {decision.solar_forecast.toFixed(1)}
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <th>Load (kW)</th>
-                {decisions.map((decision) => (
-                  <td key={decision.timestamp}>
-                    {decision.load_forecast.toFixed(1)}
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <th>Cloud (%)</th>
-                {decisions.map((decision) => (
-                  <td key={decision.timestamp}>
-                    {decision.cloud_coverage.toFixed(0)}
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <th>Weather</th>
-                {decisions.map((decision) => (
-                  <td
-                    key={decision.timestamp}
-                    title={decision.weather_symbol || "Unknown"}
-                  >
-                    {getWeatherIcon(decision.weather_symbol)}
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <th>Profit (€)</th>
-                {decisions.map((decision) => (
-                  <td key={decision.timestamp}>
-                    <span
-                      className={
-                        decision.profit >= 0 ? "value-success" : "value-error"
+                    decisions.forEach((decision) => {
+                      const date = new Date(decision.timestamp * 1000);
+                      const dateKey = `${date.getMonth() + 1}/${date.getDate()}`;
+
+                      if (currentDateKey === dateKey) {
+                        dateGroups[dateGroups.length - 1].count++;
+                      } else {
+                        dateGroups.push({ dateKey, count: 1 });
+                        currentDateKey = dateKey;
                       }
+                    });
+
+                    return dateGroups.map(({ dateKey, count }) => (
+                      <th
+                        key={dateKey}
+                        colSpan={count}
+                        style={{
+                          textAlign: "center",
+                          borderBottom: "1px solid var(--color-border)",
+                        }}
+                      >
+                        {dateKey}
+                      </th>
+                    ));
+                  })()}
+                </tr>
+                {/* Hour row */}
+                <tr>
+                  {(() => {
+                    const hourGroups: Array<{
+                      groupKey: string;
+                      count: number;
+                      hour: number;
+                    }> = [];
+                    let currentGroupKey: string | null = null;
+
+                    decisions.forEach((decision) => {
+                      const date = new Date(decision.timestamp * 1000);
+                      const dateKey = `${date.getMonth() + 1}/${date.getDate()}`;
+                      const hour = date.getHours();
+                      const groupKey = `${dateKey}-${hour}`;
+
+                      if (currentGroupKey === groupKey) {
+                        hourGroups[hourGroups.length - 1].count++;
+                      } else {
+                        hourGroups.push({ groupKey, count: 1, hour });
+                        currentGroupKey = groupKey;
+                      }
+                    });
+
+                    return hourGroups.map(({ groupKey, count, hour }) => (
+                      <th
+                        key={groupKey}
+                        colSpan={count}
+                        style={{
+                          textAlign: "center",
+                          borderBottom: "1px solid var(--color-border)",
+                        }}
+                      >
+                        {hour.toString().padStart(2, "0")}:00
+                      </th>
+                    ));
+                  })()}
+                </tr>
+                {/* Minute row */}
+                <tr>
+                  {decisions.map((decision) => {
+                    const date = new Date(decision.timestamp * 1000);
+                    const minute = date
+                      .getMinutes()
+                      .toString()
+                      .padStart(2, "0");
+                    return (
+                      <th
+                        key={decision.timestamp}
+                        style={{ fontSize: "0.8em" }}
+                      >
+                        :{minute}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th>Battery Action (kW)</th>
+                  {decisions.map((decision) => {
+                    const batteryAction = getBatteryAction(decision);
+                    return (
+                      <td key={decision.timestamp}>
+                        <span className={getActionClass(batteryAction.action)}>
+                          {batteryAction.power > 0
+                            ? batteryAction.power.toFixed(1)
+                            : ""}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr>
+                  <th>Grid Action (kW)</th>
+                  {decisions.map((decision) => {
+                    const gridAction = getGridAction(decision);
+                    return (
+                      <td key={decision.timestamp}>
+                        <span className={getActionClass(gridAction.action)}>
+                          {gridAction.power > 0
+                            ? gridAction.power.toFixed(1)
+                            : ""}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr>
+                  <th>SOC (%)</th>
+                  {decisions.map((decision) => (
+                    <td key={decision.timestamp}>
+                      {(decision.battery_soc * 100).toFixed(1)}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <th>Solar (kW)</th>
+                  {decisions.map((decision) => (
+                    <td key={decision.timestamp}>
+                      {decision.solar_forecast.toFixed(1)}
+                    </td>
+                  ))}
+                </tr>
+                <tr>
+                  <th>Load (kW)</th>
+                  {decisions.map((decision) => (
+                    <td key={decision.timestamp}>
+                      {decision.load_forecast.toFixed(1)}
+                    </td>
+                  ))}
+                </tr>
+                <tr>
+                  <th>Cloud (%)</th>
+                  {decisions.map((decision) => (
+                    <td key={decision.timestamp}>
+                      {decision.cloud_coverage.toFixed(0)}
+                    </td>
+                  ))}
+                </tr>
+                <tr>
+                  <th>Weather</th>
+                  {decisions.map((decision) => (
+                    <td
+                      key={decision.timestamp}
+                      title={decision.weather_symbol || "Unknown"}
                     >
-                      {Math.abs(decision.profit).toFixed(2)}
-                    </span>
-                  </td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
+                      {getWeatherIcon(decision.weather_symbol)}
+                    </td>
+                  ))}
+                </tr>
+                <tr>
+                  <th>Profit (€)</th>
+                  {decisions.map((decision) => (
+                    <td key={decision.timestamp}>
+                      <span
+                        className={
+                          decision.profit >= 0 ? "value-success" : "value-error"
+                        }
+                      >
+                        {Math.abs(decision.profit).toFixed(2)}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {/* Scroll hint */}
+          {(canScrollLeft || canScrollRight) && (
+            <div
+              style={{
+                textAlign: "center",
+                marginTop: "0.5rem",
+                fontSize: "0.75rem",
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              {canScrollLeft &&
+                canScrollRight &&
+                "← Scroll horizontally to view all data →"}
+              {canScrollLeft &&
+                !canScrollRight &&
+                "← Scroll left to view earlier data"}
+              {!canScrollLeft &&
+                canScrollRight &&
+                "Scroll right to view more data →"}
+            </div>
+          )}
         </div>
       )}
     </section>
