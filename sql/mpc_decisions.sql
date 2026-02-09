@@ -19,7 +19,7 @@ CREATE TABLE mpc_decisions (
 
 -- Column descriptions:
 -- timestamp: Unix timestamp when this time slot begins (PRIMARY KEY)
--- hour: Hour index in the optimization horizon (0-based)
+-- hour: Time slot index in the optimization horizon (0-based), represents periods based on check_price_interval (e.g., 15-minute intervals)
 -- battery_charge: Battery charging power in kW (positive = charging) - DEPRECATED: use battery_charge_from_pv + battery_charge_from_grid
 -- battery_charge_from_pv: Battery charging power from PV surplus in kW
 -- battery_charge_from_grid: Battery charging power from grid in kW (zero solar scenario)
@@ -27,10 +27,10 @@ CREATE TABLE mpc_decisions (
 -- grid_import: Grid import power in kW (positive = importing)
 -- grid_export: Grid export power in kW (positive = exporting)
 -- battery_soc: Battery state of charge as fraction (0-1)
--- profit: Expected profit for this hour in EUR
--- import_price: Electricity import price in EUR/kWh
--- export_price: Electricity export price in EUR/kWh
--- solar_forecast: Forecasted solar generation in kW (average for the hour)
--- load_forecast: Forecasted load consumption in kW (average for the hour)
+-- profit: Expected profit for this time period in EUR
+-- import_price: Electricity import price in EUR/kWh (exact price for this time slot, not averaged)
+-- export_price: Electricity export price in EUR/kWh (exact price for this time slot, not averaged)
+-- solar_forecast: Forecasted solar generation in kW (average for the time period)
+-- load_forecast: Forecasted load consumption in kW (average for the time period)
 -- cloud_coverage: Cloud coverage percentage (0-100)
 -- weather_symbol: Weather condition symbol code

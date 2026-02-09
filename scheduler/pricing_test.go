@@ -10,10 +10,10 @@ import (
 	"time"
 )
 
-// TestGetCurrentAvgPrice_UsesConfiguredTimezone validates that getCurrentAvgPrice uses the configured timezone
-// This test validates the fix for the timezone mismatch issue where getCurrentAvgPrice was using time.Now()
+// TestGetCurrentPrice_UsesConfiguredTimezone validates that getCurrentPrice uses the configured timezone
+// This test validates the fix for the timezone mismatch issue where getCurrentPrice was using time.Now()
 // without timezone conversion, while GetMarketData was using timezone-aware time.
-func TestGetCurrentAvgPrice_UsesConfiguredTimezone(t *testing.T) {
+func TestGetCurrentPrice_UsesConfiguredTimezone(t *testing.T) {
 	// Load test data
 	xmlData, err := os.ReadFile("../test_data/Energy_Prices_202509052100-202509062100.xml")
 	if err != nil {
@@ -64,7 +64,7 @@ func TestGetCurrentAvgPrice_UsesConfiguredTimezone(t *testing.T) {
 	}
 
 	// Verify we can find a price for our test time using the market data directly
-	price, found := marketData.LookupAveragePriceInHourByTime(testTime)
+	price, found := marketData.LookupPriceByTime(testTime)
 	if !found {
 		t.Fatalf("Price not found for test time %s in timezone %s", testTime.Format(time.RFC3339), location)
 	}
@@ -79,8 +79,8 @@ func TestGetCurrentAvgPrice_UsesConfiguredTimezone(t *testing.T) {
 	t.Log("Timezone configuration validated successfully")
 }
 
-// TestGetCurrentAvgPrice_LocationLoading validates that getCurrentAvgPrice correctly loads the timezone
-func TestGetCurrentAvgPrice_LocationLoading(t *testing.T) {
+// TestGetCurrentPrice_LocationLoading validates that getCurrentPrice correctly loads the timezone
+func TestGetCurrentPrice_LocationLoading(t *testing.T) {
 	// Load test data
 	xmlData, err := os.ReadFile("../test_data/Energy_Prices_202509052100-202509062100.xml")
 	if err != nil {
@@ -109,10 +109,10 @@ func TestGetCurrentAvgPrice_LocationLoading(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Call getCurrentAvgPrice - it should load the location internally
+	// Call getCurrentPrice - it should load the location internally
 	// Even though the current time won't match the test data time range,
 	// the function should at least load the timezone correctly and not panic
-	_, err = scheduler.getCurrentAvgPrice(ctx)
+	_, err = scheduler.getCurrentPrice(ctx)
 
 	// We expect an error since current time doesn't match test data
 	// But the important thing is it loaded the timezone correctly
@@ -126,11 +126,11 @@ func TestGetCurrentAvgPrice_LocationLoading(t *testing.T) {
 		}
 	}
 
-	t.Log("getCurrentAvgPrice successfully loads timezone configuration")
+	t.Log("getCurrentPrice successfully loads timezone configuration")
 }
 
-// TestGetCurrentAvgPrice_InvalidLocation validates error handling for invalid timezone
-func TestGetCurrentAvgPrice_InvalidLocation(t *testing.T) {
+// TestGetCurrentPrice_InvalidLocation validates error handling for invalid timezone
+func TestGetCurrentPrice_InvalidLocation(t *testing.T) {
 	// Load test data
 	xmlData, err := os.ReadFile("../test_data/Energy_Prices_202509052100-202509062100.xml")
 	if err != nil {
@@ -159,8 +159,8 @@ func TestGetCurrentAvgPrice_InvalidLocation(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Call getCurrentAvgPrice with invalid timezone - should return an error
-	_, err = scheduler.getCurrentAvgPrice(ctx)
+	// Call getCurrentPrice with invalid timezone - should return an error
+	_, err = scheduler.getCurrentPrice(ctx)
 
 	if err == nil {
 		t.Fatal("Expected error for invalid timezone, got nil")

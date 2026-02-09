@@ -24,10 +24,14 @@ func main() {
 		MaxGridExport:          10.0, // 10 kW
 	}
 
-	// Create MPC controller with 24-hour horizon
-	mpcController := mpc.NewController(config, 24, 0.5) // Start at 50% SOC
+	// Create MPC controller with 24-hour horizon using hourly time slots
+	// Note: In production, this can be configured to use 15-minute intervals (96 slots for 24 hours)
+	// or any other interval based on check_price_interval configuration
+	mpcController := mpc.NewController(config, 24, 0.5) // 24 hourly slots, start at 50% SOC
 
-	// Create 24-hour forecast
+	// Create 24-hour forecast with hourly time slots
+	// Note: For 15-minute intervals, you would create 96 slots (24 hours * 4 slots/hour)
+	// with prices and forecasts for each 15-minute period
 	forecast := make([]mpc.TimeSlot, 24)
 	for i := range 24 {
 		// Example: cheap at night, expensive during day
@@ -65,9 +69,10 @@ func main() {
 	}
 
 	// Run optimization
-	fmt.Println("Solar Inverter MPC Optimization")
-	fmt.Println("================================")
-	fmt.Printf("Initial SOC: %.1f%%\n\n", mpcController.CurrentSOC*100)
+	fmt.Println("Solar Inverter MPC Optimization (Hourly Example)")
+	fmt.Println("=================================================")
+	fmt.Printf("Initial SOC: %.1f%%\n", mpcController.CurrentSOC*100)
+	fmt.Printf("Time slots: %d (hourly intervals)\n\n", len(forecast))
 
 	startTime := time.Now()
 	decisions := mpcController.Optimize(forecast)
@@ -120,4 +125,7 @@ func main() {
 	fmt.Println("- Charges battery from solar during day")
 	fmt.Println("- Discharges battery during expensive peak hours")
 	fmt.Println("- Exports excess solar when prices are favorable")
+	fmt.Println("\nNote: This example uses hourly time slots.")
+	fmt.Println("For 15-minute intervals (as configured in production with check_price_interval=15m),")
+	fmt.Println("create 96 time slots with specific prices for each 15-minute period.")
 }

@@ -92,7 +92,11 @@ func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) error {
 	for _, dec := range decisions {
 		totalProfit += dec.Profit
 	}
-	s.logger.Printf("Total expected profit over %d hours: %.2f EUR", len(decisions), totalProfit)
+
+	// Calculate forecast duration based on check_price_interval and number of decisions
+	forecastDuration := config.CheckPriceInterval * time.Duration(len(decisions))
+	s.logger.Printf("Total expected profit over %d time periods (%.1f hours): %.2f EUR",
+		len(decisions), forecastDuration.Hours(), totalProfit)
 
 	// Step 6: Execute the first control decision
 	err = s.executeMPCDecision(&decisions[0], config.DryRun)
@@ -136,13 +140,17 @@ func (s *MinerScheduler) readPlantRunningInfo(config *Config) (*sigenergy.PlantR
 }
 
 // buildMPCForecast builds the forecast data needed for MPC optimization
+// buildMPCForecast builds a forecast for MPC optimization combining prices, solar, and load
 func (s *MinerScheduler) buildMPCForecast(ctx context.Context, config *Config, plantInfo *sigenergy.PlantRunningInfo) ([]mpc.TimeSlot, error) {
 	now := time.Now()
 
-	// Get electricity price forecast
-	priceForecasts, err := s.getPriceForecast(ctx, now)
+	// Get the market data for price lookups
+	marketData, err := s.GetMarketData(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get price forecast: %w", err)
+		return nil, fmt.Errorf("failed to get market data: %w", err)
+	}
+	if marketData == nil {
+		return nil, fmt.Errorf("no price document available")
 	}
 
 	// Get weather forecast for weather data
@@ -152,44 +160,71 @@ func (s *MinerScheduler) buildMPCForecast(ctx context.Context, config *Config, p
 		weatherForecast = nil
 	}
 
-	// Get solar forecast with weather data
-	solarForecasts, weatherData, err := s.getSolarForecast(config, now, weatherForecast, plantInfo)
-	if err != nil {
-		s.logger.Printf("Warning: failed to get solar forecast: %v, using zero solar", err)
-		// Continue with zero solar forecast
+	// Pre-compute hourly solar and weather forecasts (cache for efficiency)
+	// Solar forecasts are typically hourly, so we compute them once and reuse for all 15-min slots in each hour
+	var solarForecasts map[int]float64
+	var weatherData map[int]WeatherData
+	if weatherForecast != nil {
+		solarForecasts, weatherData, err = s.getSolarForecast(config, now, weatherForecast, plantInfo)
+		if err != nil {
+			s.logger.Printf("Warning: failed to get solar forecast: %v, using zero solar", err)
+			solarForecasts = make(map[int]float64)
+			weatherData = make(map[int]WeatherData)
+		}
+	} else {
 		solarForecasts = make(map[int]float64)
 		weatherData = make(map[int]WeatherData)
 	}
 
-	// Build time slots
+	// Determine time slot duration based on CheckPriceInterval
+	// Default to 15 minutes if not configured
+	slotDuration := config.CheckPriceInterval
+	if slotDuration == 0 {
+		slotDuration = 15 * time.Minute
+	}
+
+	// Calculate number of slots for next 24-48 hours
+	// Use 36 hours to have enough forecast horizon
+	forecastDuration := 36 * time.Hour
+	numSlots := int(forecastDuration / slotDuration)
+
+	// Build time slots at the configured interval
 	var timeSlots []mpc.TimeSlot
-	for hour, prices := range priceForecasts {
-		solar := solarForecasts[hour]
-		weather := weatherData[hour]
+	for i := range numSlots {
+		futureTime := now.Add(time.Duration(i) * slotDuration)
+
+		// Get exact price for this time slot using LookupPriceByTime
+		// This will return the price for the specific 15-minute interval
+		var importPrice, exportPrice float64
+		if spotPrice, found := marketData.LookupPriceByTime(futureTime); found {
+			// Apply price adjustments from configuration (all values in EUR/MWh)
+			importPrice = (spotPrice + config.ImportPriceOperatorFee + config.ImportPriceDeliveryFee) / 1000.0 // Convert to EUR/kWh
+			exportPrice = (spotPrice - config.ExportPriceOperatorFee) / 1000.0                                 // Convert to EUR/kWh
+		} else {
+			// No price available for this time slot, skip it
+			continue
+		}
+
+		// Get solar forecast for this time period
+		// Since solar forecasts are typically hourly, we use the forecast for the containing hour
+		// All 15-minute slots within the same hour will use the same solar/weather forecast
+		hourIndex := int(futureTime.Sub(now).Hours())
+		solar := solarForecasts[hourIndex]
+		weather := weatherData[hourIndex]
 
 		// Estimate load forecast (miners only, based on price and solar availability)
-		loadForecast := s.estimateLoadForecast(prices.Import, config.PriceLimit/1000, solar, config)
+		loadForecast := s.estimateLoadForecast(importPrice*1000.0, config.PriceLimit/1000, solar, config)
 
-		futureTime := now.Add(time.Duration(hour) * time.Hour)
 		timeSlots = append(timeSlots, mpc.TimeSlot{
-			Hour:          hour,
+			Hour:          i, // Now represents time slot index, not hour
 			Timestamp:     futureTime.Unix(),
-			ImportPrice:   prices.Import / 1000.0, // Convert EUR/MWh to EUR/kWh
-			ExportPrice:   prices.Export / 1000.0, // Convert EUR/MWh to EUR/kWh
+			ImportPrice:   importPrice,
+			ExportPrice:   exportPrice,
 			SolarForecast: solar,
 			LoadForecast:  loadForecast,
 			CloudCoverage: weather.CloudCoverage,
 			WeatherSymbol: weather.WeatherSymbol,
 		})
-	}
-
-	// Sort by hour
-	for i := 0; i < len(timeSlots); i++ {
-		for j := i + 1; j < len(timeSlots); j++ {
-			if timeSlots[i].Hour > timeSlots[j].Hour {
-				timeSlots[i], timeSlots[j] = timeSlots[j], timeSlots[i]
-			}
-		}
 	}
 
 	return timeSlots, nil
@@ -199,47 +234,6 @@ func (s *MinerScheduler) buildMPCForecast(ctx context.Context, config *Config, p
 type WeatherData struct {
 	CloudCoverage float64 // % cloud coverage (0-100)
 	WeatherSymbol string  // weather condition symbol
-}
-
-// PricePoint represents import and export prices for a specific hour
-type PricePoint struct {
-	Import float64 // EUR/MWh
-	Export float64 // EUR/MWh
-}
-
-// getPriceForecast gets electricity prices for the next 36 hours
-func (s *MinerScheduler) getPriceForecast(ctx context.Context, now time.Time) (map[int]PricePoint, error) {
-
-	// Get the market data
-	marketData, err := s.GetMarketData(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if marketData == nil {
-		return nil, fmt.Errorf("no price document available")
-	}
-
-	// Get configuration for price adjustments
-	config := s.GetConfig()
-
-	// Extract prices for next 36 hours
-	forecast := make(map[int]PricePoint)
-	for i := range 36 {
-		futureTime := now.Add(time.Duration(i) * time.Hour)
-		price, found := marketData.LookupAveragePriceInHourByTime(futureTime)
-
-		if found {
-			// Apply price adjustments from configuration (all values in EUR/MWh)
-			// Import price: add operator fee and delivery fee
-			// Export price: subtract operator fee
-			forecast[i] = PricePoint{
-				Import: price + config.ImportPriceOperatorFee + config.ImportPriceDeliveryFee,
-				Export: price - config.ExportPriceOperatorFee,
-			}
-		}
-	}
-
-	return forecast, nil
 }
 
 // getSolarForecast gets solar power forecast from weather data
@@ -477,7 +471,7 @@ func (s *MinerScheduler) executeMPCDecision(decision *mpc.ControlDecision, dryRu
 		// Battery should charge
 		// Use BatteryChargeFromPV as the charge limit
 		chargeLimit := decision.BatteryChargeFromPV
-		
+
 		// Decide mode based on whether grid charging is needed
 		if decision.BatteryChargeFromGrid > 0.01 {
 			// Mode 4: Command charging (PV first, then grid) - charge from PV and grid if needed
