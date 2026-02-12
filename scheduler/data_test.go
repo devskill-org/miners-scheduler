@@ -17,14 +17,14 @@ func TestDataSamples_IntegrateSamplesWithPeriodBoundary(t *testing.T) {
 	// 6 samples: 0s, 10s, 20s, 30s, 40s, 50s
 	for i := range 6 {
 		ts := baseTime.Add(time.Duration(i) * pollInterval)
-		samples.AddSample(100.0, 50.0, 30.0, 10.0, 80.0, ts)
+		samples.AddSample(100.0, 50.0, 30.0, 10.0, 80.0, 25.0, ts)
 	}
 
 	// Add samples for second period (12:01:00 to 12:01:50)
 	// 6 samples: 60s, 70s, 80s, 90s, 100s, 110s
 	for i := range 6 {
 		ts := baseTime.Add(integrationPeriod).Add(time.Duration(i) * pollInterval)
-		samples.AddSample(200.0, 100.0, 60.0, 20.0, 75.0, ts)
+		samples.AddSample(200.0, 100.0, 60.0, 20.0, 75.0, 26.0, ts)
 	}
 
 	// Integrate first period only (cutoff at 12:01:00)
@@ -64,7 +64,7 @@ func TestDataSamples_ClearBefore(t *testing.T) {
 	// 12 samples: 0s, 10s, 20s, 30s, 40s, 50s, 60s, 70s, 80s, 90s, 100s, 110s
 	for i := range 12 {
 		ts := baseTime.Add(time.Duration(i) * 10 * time.Second)
-		samples.AddSample(100.0, 50.0, 30.0, 10.0, 80.0, ts)
+		samples.AddSample(100.0, 50.0, 30.0, 10.0, 80.0, 25.0, ts)
 	}
 
 	// Clear samples before and at 1 minute mark (60s)
@@ -96,7 +96,7 @@ func TestDataSamples_IntegrationPreservesForRetry(t *testing.T) {
 	// Add 6 samples for first period (0s to 50s)
 	for i := range 6 {
 		ts := baseTime.Add(time.Duration(i) * pollInterval)
-		samples.AddSample(100.0, 50.0, 30.0, 10.0, 80.0, ts)
+		samples.AddSample(100.0, 50.0, 30.0, 10.0, 80.0, 25.0, ts)
 	}
 
 	// Cutoff at 50s (not 60s) to avoid including second period samples
@@ -110,7 +110,7 @@ func TestDataSamples_IntegrationPreservesForRetry(t *testing.T) {
 	// Add more samples for second period (60s to 110s)
 	for i := range 6 {
 		ts := baseTime.Add(60 * time.Second).Add(time.Duration(i) * pollInterval)
-		samples.AddSample(200.0, 100.0, 60.0, 20.0, 75.0, ts)
+		samples.AddSample(200.0, 100.0, 60.0, 20.0, 75.0, 26.0, ts)
 	}
 
 	// Retry integration for first period (same cutoff)
@@ -181,10 +181,10 @@ func TestDataSamples_BoundaryConditions(t *testing.T) {
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	// Add sample exactly at boundary
-	samples.AddSample(100.0, 50.0, 30.0, 10.0, 80.0, baseTime)
+	samples.AddSample(100.0, 50.0, 30.0, 10.0, 80.0, 25.0, baseTime)
 
 	// Add sample 1 nanosecond after boundary
-	samples.AddSample(200.0, 100.0, 60.0, 20.0, 75.0, baseTime.Add(1))
+	samples.AddSample(200.0, 100.0, 60.0, 20.0, 75.0, 26.0, baseTime.Add(1))
 
 	// Integrate with cutoff at baseTime
 	data := samples.IntegrateSamples(pollInterval, baseTime)
@@ -221,6 +221,7 @@ func TestIntegratedData_EnergyCalculations(t *testing.T) {
 		300.0,  // Battery charge: 300W
 		100.0,  // EVDC: 100W
 		85.0,   // SOC: 85%
+		25.0,   // Battery temp: 25°C
 		baseTime,
 	)
 
@@ -230,6 +231,7 @@ func TestIntegratedData_EnergyCalculations(t *testing.T) {
 		-150.0, // Battery discharge: 150W
 		0.0,    // EVDC: 0W
 		83.0,   // SOC: 83%
+		26.0,   // Battery temp: 26°C
 		baseTime.Add(pollInterval),
 	)
 
