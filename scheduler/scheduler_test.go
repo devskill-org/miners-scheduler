@@ -315,13 +315,10 @@ func TestGetDiscoveredMiners(t *testing.T) {
 		{Address: "192.168.1.101", Port: 4028},
 	}
 
-	scheduler.mu.Lock()
-	scheduler.discoveredMiners = make(map[string]*miners.AvalonQHost)
 	for _, miner := range mockMiners {
 		key := fmt.Sprintf("%s:%d", miner.Address, miner.Port)
-		scheduler.discoveredMiners[key] = miner
+		scheduler.discoveredMiners.Store(key, miner)
 	}
-	scheduler.mu.Unlock()
 
 	// Test getting miners
 	retrievedMiners := scheduler.GetDiscoveredMiners()
@@ -352,13 +349,10 @@ func TestDiscoverMinersPreservesExisting(t *testing.T) {
 		{Address: "192.168.1.101", Port: 4028},
 	}
 
-	scheduler.mu.Lock()
-	scheduler.discoveredMiners = make(map[string]*miners.AvalonQHost)
 	for _, miner := range initialMiners {
 		key := fmt.Sprintf("%s:%d", miner.Address, miner.Port)
-		scheduler.discoveredMiners[key] = miner
+		scheduler.discoveredMiners.Store(key, miner)
 	}
-	scheduler.mu.Unlock()
 
 	// Run discovery (should not find anything on 127.0.0.1/32, but existing miners should be preserved)
 	err := scheduler.discoverMiners(context.Background())
@@ -422,12 +416,11 @@ func TestSchedulerStatus_WithData(t *testing.T) {
 		CreatedDateTime: "2024-01-15T10:30:00Z",
 	}
 
-	scheduler.mu.Lock()
-	scheduler.discoveredMiners = make(map[string]*miners.AvalonQHost)
 	for _, miner := range mockMiners {
 		key := fmt.Sprintf("%s:%d", miner.Address, miner.Port)
-		scheduler.discoveredMiners[key] = miner
+		scheduler.discoveredMiners.Store(key, miner)
 	}
+	scheduler.mu.Lock()
 	scheduler.pricesMarketData = mockDoc
 	scheduler.mu.Unlock()
 
@@ -495,10 +488,9 @@ func BenchmarkSchedulerGetStatus(b *testing.B) {
 			Port:    4028,
 		}
 	}
-	scheduler.discoveredMiners = make(map[string]*miners.AvalonQHost)
 	for _, miner := range mockMiners {
 		key := fmt.Sprintf("%s:%d", miner.Address, miner.Port)
-		scheduler.discoveredMiners[key] = miner
+		scheduler.discoveredMiners.Store(key, miner)
 	}
 
 	for b.Loop() {
@@ -654,10 +646,9 @@ func BenchmarkSchedulerGetDiscoveredMiners(b *testing.B) {
 			Port:    4028,
 		}
 	}
-	scheduler.discoveredMiners = make(map[string]*miners.AvalonQHost)
 	for _, miner := range mockMiners {
 		key := fmt.Sprintf("%s:%d", miner.Address, miner.Port)
-		scheduler.discoveredMiners[key] = miner
+		scheduler.discoveredMiners.Store(key, miner)
 	}
 
 	for b.Loop() {

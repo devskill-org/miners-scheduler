@@ -367,7 +367,7 @@ func getAddresses(ctx context.Context, network string) iter.Seq[netip.Addr] {
 				return
 			default:
 			}
-			
+
 			if !yield(next) {
 				return
 			}
@@ -454,7 +454,9 @@ func version(ctx context.Context, address string, port int) (*AvalonQVersion, er
 }
 
 func send[T any](ctx context.Context, address string, port int, sender Sender, receiver Receiver[T]) (T, error) {
-	var d net.Dialer
+	d := net.Dialer{
+		Timeout: time.Second,
+	}
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
@@ -464,6 +466,12 @@ func send[T any](ctx context.Context, address string, port int, sender Sender, r
 		return zero, err
 	}
 	defer conn.Close()
+
+	// Set deadline for all operations on this connection
+	if err := conn.SetDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		var zero T
+		return zero, err
+	}
 
 	if err := sender(conn); err != nil {
 		var zero T

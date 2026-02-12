@@ -21,21 +21,22 @@ func (s *MinerScheduler) discoverMiners(ctx context.Context) error {
 		newlyDiscoveredMiners = miners.Discover(ctx, s.config.Network)
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	// Add only new miners that don't already exist
 	newMinersCount := 0
 	for _, newMiner := range newlyDiscoveredMiners {
 		key := fmt.Sprintf("%s:%d", newMiner.Address, newMiner.Port)
-		if _, exists := s.discoveredMiners[key]; !exists {
-			s.discoveredMiners[key] = newMiner
+		if _, exists := s.discoveredMiners.LoadOrStore(key, newMiner); !exists {
 			newMinersCount++
 			s.logger.Printf("  New miner discovered: %s:%d", newMiner.Address, newMiner.Port)
 		}
 	}
 
-	totalMiners := len(s.discoveredMiners)
+	// Count total miners
+	totalMiners := 0
+	s.discoveredMiners.Range(func(_, _ any) bool {
+		totalMiners++
+		return true
+	})
 	s.logger.Printf("Discovery complete: %d total miners (%d newly discovered)", totalMiners, newMinersCount)
 
 	return nil

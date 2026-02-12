@@ -85,7 +85,7 @@ type MinerScheduler struct {
 	config *Config
 
 	// State
-	discoveredMiners       map[string]*miners.AvalonQHost
+	discoveredMiners       sync.Map // map[string]*miners.AvalonQHost
 	pricesMarketData       *entsoe.PublicationMarketData
 	pricesMarketDataExpiry time.Time
 	isRunning              bool
@@ -119,10 +119,9 @@ func NewMinerScheduler(config *Config, logger *log.Logger) *MinerScheduler {
 	}
 
 	scheduler := &MinerScheduler{
-		config:           config,
-		discoveredMiners: make(map[string]*miners.AvalonQHost),
-		stopChan:         make(chan struct{}),
-		logger:           logger,
+		config:   config,
+		stopChan: make(chan struct{}),
+		logger:   logger,
 		weatherCache: WeatherForecastCache{
 			cacheDuration: 2 * time.Hour,
 		},
@@ -154,14 +153,14 @@ func (s *MinerScheduler) GetConfig() *Config {
 
 // GetDiscoveredMiners returns a copy of the currently discovered miners
 func (s *MinerScheduler) GetDiscoveredMiners() []*miners.AvalonQHost {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// Convert map to slice and return a copy
-	minersCopy := make([]*miners.AvalonQHost, 0, len(s.discoveredMiners))
-	for _, miner := range s.discoveredMiners {
-		minersCopy = append(minersCopy, miner)
-	}
+	// Convert sync.Map to slice
+	minersCopy := make([]*miners.AvalonQHost, 0)
+	s.discoveredMiners.Range(func(_, value any) bool {
+		if miner, ok := value.(*miners.AvalonQHost); ok {
+			minersCopy = append(minersCopy, miner)
+		}
+		return true
+	})
 	return minersCopy
 }
 
@@ -366,9 +365,16 @@ func (s *MinerScheduler) GetStatus() Status {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	// Count miners in sync.Map
+	minersCount := 0
+	s.discoveredMiners.Range(func(_, _ any) bool {
+		minersCount++
+		return true
+	})
+
 	return Status{
 		IsRunning:     s.isRunning,
-		MinersCount:   len(s.discoveredMiners),
+		MinersCount:   minersCount,
 		HasMarketData: s.pricesMarketData != nil,
 	}
 }
