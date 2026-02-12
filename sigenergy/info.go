@@ -74,6 +74,7 @@ func ShowPlantInfo(plantModbusAddress string) error {
 	fmt.Println("--------------------------------------------------")
 	fmt.Printf("  ESS SOC:                        %.1f %%\n", info.ESSSOC)
 	fmt.Printf("  ESS SOH:                        %.1f %%\n", info.ESSSOH)
+	fmt.Printf("  ESS Average Cell Temperature:   %.1f °C\n", info.ESSAvgCellTemperature)
 	fmt.Printf("  ESS Rated Energy Capacity:      %.2f kWh\n", info.ESSRatedEnergyCapacity)
 	fmt.Printf("  ESS Charge Off SOC:             %.1f %%\n", info.ESSChargeOffSOC)
 	fmt.Printf("  ESS Discharge Off SOC:          %.1f %%\n", info.ESSDischargeOffSOC)

@@ -153,6 +153,7 @@ type PlantRunningInfo struct {
 	ESSChargeOffSOC                 float64 // %
 	ESSDischargeOffSOC              float64 // %
 	ESSSOH                          float64 // %
+	ESSAvgCellTemperature           float64 // °C
 	DCChargerOutputPower            float64 // kW
 	DCChargerVehicleSOC             float64 // %
 }
@@ -216,6 +217,16 @@ func (c *SigenModbusClient) ReadPlantRunningInfo() (*PlantRunningInfo, error) {
 		info.DCChargerOutputPower = float64(bytesToS32(data3[0:4])) / 1000.0
 		info.DCChargerVehicleSOC = float64(bytesToU16(data3[4:6])) / 10.0
 	}
+
+	// Read ESS Average Cell Temperature from first inverter (slave address 1, register 30603)
+	// Note: This assumes at least one hybrid inverter is present with slave ID 1
+	c.SetSlaveID(1)
+	data4, err := c.client.ReadInputRegisters(30603, 1)
+	if err == nil {
+		info.ESSAvgCellTemperature = float64(bytesToS16(data4[0:2])) / 10.0
+	}
+	// Reset to plant address
+	c.SetSlaveID(PlantAddress)
 
 	return info, nil
 }

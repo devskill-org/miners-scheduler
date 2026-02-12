@@ -13,6 +13,7 @@ CREATE TABLE metrics (
     grid_export_cost NUMERIC,
     grid_import_cost NUMERIC,
     battery_soc NUMERIC,
+    battery_avg_cell_temperature NUMERIC,
     weather_symbol VARCHAR(100),
     PRIMARY KEY (timestamp, device_id, metric_name)
 );
@@ -36,6 +37,7 @@ CREATE INDEX idx_metrics_time ON metrics USING BRIN (timestamp);
 -- grid_export_cost: Total cost of power exported to grid in EUR
 -- grid_import_cost: Total cost of power imported from grid in EUR
 -- battery_soc: Battery state of charge in % (snapshot at end of period)
+-- battery_avg_cell_temperature: Battery average cell temperature in °C (snapshot at end of period)
 -- weather_symbol: Weather condition symbol code (e.g., 'clearsky_day', 'rain', etc.)
 
 -- Migration for existing tables:
@@ -48,4 +50,5 @@ CREATE INDEX idx_metrics_time ON metrics USING BRIN (timestamp);
 -- ALTER TABLE metrics ADD COLUMN grid_export_cost NUMERIC;
 -- ALTER TABLE metrics ADD COLUMN grid_import_cost NUMERIC;
 -- ALTER TABLE metrics ADD COLUMN battery_soc NUMERIC;
+-- ALTER TABLE metrics ADD COLUMN battery_avg_cell_temperature NUMERIC;
 -- ALTER TABLE metrics ADD COLUMN weather_symbol VARCHAR(100);

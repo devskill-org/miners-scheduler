@@ -44,12 +44,13 @@ func (w *WeatherForecastCache) Set(forecast *meteo.METJSONForecast) {
 
 // DataSample represents a single measurement of power and battery data.
 type DataSample struct {
-	pvPower      float64
-	gridPower    float64 // positive = import, negative = export
-	batteryPower float64 // positive = charging, negative = discharging
-	evdcPower    float64
-	batterySoc   float64 // %
-	ts           time.Time
+	pvPower            float64
+	gridPower          float64 // positive = import, negative = export
+	batteryPower       float64 // positive = charging, negative = discharging
+	evdcPower          float64
+	batterySoc         float64 // %
+	batteryAvgCellTemp float64 // °C
+	ts                 time.Time
 }
 
 // DataSamples is a thread-safe collection of power measurement samples.
@@ -59,16 +60,17 @@ type DataSamples struct {
 }
 
 // AddSample adds a new power measurement sample to the collection.
-func (d *DataSamples) AddSample(pvPower, gridPower, batteryPower, evdcPower, batterySoc float64, ts time.Time) {
+func (d *DataSamples) AddSample(pvPower, gridPower, batteryPower, evdcPower, batterySoc, batteryAvgCellTemp float64, ts time.Time) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.samples = append(d.samples, DataSample{
-		pvPower:      pvPower,
-		gridPower:    gridPower,
-		batteryPower: batteryPower,
-		evdcPower:    evdcPower,
-		batterySoc:   batterySoc,
-		ts:           ts,
+		pvPower:            pvPower,
+		gridPower:          gridPower,
+		batteryPower:       batteryPower,
+		evdcPower:          evdcPower,
+		batterySoc:         batterySoc,
+		batteryAvgCellTemp: batteryAvgCellTemp,
+		ts:                 ts,
 	})
 }
 
@@ -82,6 +84,7 @@ type IntegratedData struct {
 	evdcChargePower       float64
 	loadPower             float64
 	batterySoc            float64
+	batteryAvgCellTemp    float64
 	timestamp             time.Time
 	sampleCount           int // Number of samples integrated
 }
@@ -125,8 +128,9 @@ func (d *DataSamples) IntegrateSamples(pollInterval time.Duration, cutoffTime ti
 		// EV DC charging power
 		result.evdcChargePower += sample.evdcPower * energyKWh
 
-		// Keep the last battery SOC
+		// Keep the last battery SOC and temperature
 		result.batterySoc = sample.batterySoc
+		result.batteryAvgCellTemp = sample.batteryAvgCellTemp
 	}
 
 	// Calculate load: Load = PV + Battery Discharge + Grid Import - Battery Charge - Grid Export - EV Charge
@@ -190,6 +194,7 @@ func (s *MinerScheduler) runDataPoll(samples *DataSamples) error {
 		info.ESSPower,
 		info.DCChargerOutputPower,
 		info.ESSSOC,
+		info.ESSAvgCellTemperature,
 		time.Now(),
 	)
 	return nil
@@ -258,8 +263,8 @@ func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval t
 			deviceID, timestamp.Format(time.RFC3339), data.sampleCount)
 		s.logger.Printf("  PV: %.3f kWh, Grid Import: %.3f kWh (%.3f), Grid Export: %.3f kWh (%.3f)",
 			data.pvTotalPower, data.gridImportPower, gridImportCost, data.gridExportPower, gridExportCost)
-		s.logger.Printf("  Battery Charge: %.3f kWh, Battery Discharge: %.3f kWh, SOC: %.1f%%",
-			data.batteryChargePower, data.batteryDischargePower, data.batterySoc)
+		s.logger.Printf("  Battery Charge: %.3f kWh, Battery Discharge: %.3f kWh, SOC: %.1f%%, Temp: %.1f°C",
+			data.batteryChargePower, data.batteryDischargePower, data.batterySoc, data.batteryAvgCellTemp)
 		s.logger.Printf("  EV Charge: %.3f kWh, Load: %.3f kWh", data.evdcChargePower, data.loadPower)
 		if cloudCoverage != nil {
 			s.logger.Printf("  Cloud Coverage: %.1f%%", *cloudCoverage)
@@ -277,14 +282,16 @@ func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval t
 				grid_export_power, grid_import_power,
 				battery_charge_power, battery_discharge_power, battery_soc,
 				evdc_charge_power, load_power,
-				grid_export_cost, grid_import_cost
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+				grid_export_cost, grid_import_cost,
+				battery_avg_cell_temperature
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
 			timestamp, deviceID, "energy_flow",
 			data.pvTotalPower, cloudCoverage, weatherSymbol,
 			data.gridExportPower, data.gridImportPower,
 			data.batteryChargePower, data.batteryDischargePower, data.batterySoc,
 			data.evdcChargePower, data.loadPower,
 			gridExportCost, gridImportCost,
+			data.batteryAvgCellTemp,
 		)
 		if err != nil {
 			s.logger.Printf("Data integration: failed to insert metrics: %v", err)
@@ -298,8 +305,8 @@ func (s *MinerScheduler) runDataIntegration(samples *DataSamples, pollInterval t
 			deviceID, timestamp.Format(time.RFC3339), data.sampleCount)
 		s.logger.Printf("  PV: %.3f kWh, Grid Import: %.3f kWh (%.3f), Grid Export: %.3f kWh (%.3f)",
 			data.pvTotalPower, data.gridImportPower, gridImportCost, data.gridExportPower, gridExportCost)
-		s.logger.Printf("  Battery Charge: %.3f kWh, Battery Discharge: %.3f kWh, SOC: %.1f%%",
-			data.batteryChargePower, data.batteryDischargePower, data.batterySoc)
+		s.logger.Printf("  Battery Charge: %.3f kWh, Battery Discharge: %.3f kWh, SOC: %.1f%%, Temp: %.1f°C",
+			data.batteryChargePower, data.batteryDischargePower, data.batterySoc, data.batteryAvgCellTemp)
 		s.logger.Printf("  EV Charge: %.3f kWh, Load: %.3f kWh", data.evdcChargePower, data.loadPower)
 	}
 	return nil
