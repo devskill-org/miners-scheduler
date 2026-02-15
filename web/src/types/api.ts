@@ -14,6 +14,8 @@ export interface MPCDecisionInfo {
   load_forecast: number;
   cloud_coverage: number;
   weather_symbol: string;
+  battery_avg_cell_temp: number;
+  air_temperature: number;
 }
 
 export interface SchedulerStatus {

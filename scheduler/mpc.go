@@ -72,6 +72,13 @@ func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) error {
 		return nil
 	}
 
+	// Step 4.1: Add battery temperature to all decisions
+	// Use current temperature as baseline (future temperature forecasting could be added later)
+	batteryTemp := plantInfo.ESSAvgCellTemperature
+	for i := range decisions {
+		decisions[i].BatteryAvgCellTemp = batteryTemp
+	}
+
 	// Step 5: Save optimization results to memory
 	s.mu.Lock()
 	s.mpcDecisions = decisions
@@ -216,14 +223,15 @@ func (s *MinerScheduler) buildMPCForecast(ctx context.Context, config *Config, p
 		loadForecast := s.estimateLoadForecast(importPrice*1000.0, config.PriceLimit/1000, solar, config)
 
 		timeSlots = append(timeSlots, mpc.TimeSlot{
-			Hour:          i, // Now represents time slot index, not hour
-			Timestamp:     futureTime.Unix(),
-			ImportPrice:   importPrice,
-			ExportPrice:   exportPrice,
-			SolarForecast: solar,
-			LoadForecast:  loadForecast,
-			CloudCoverage: weather.CloudCoverage,
-			WeatherSymbol: weather.WeatherSymbol,
+			Hour:           i, // Now represents time slot index, not hour
+			Timestamp:      futureTime.Unix(),
+			ImportPrice:    importPrice,
+			ExportPrice:    exportPrice,
+			SolarForecast:  solar,
+			LoadForecast:   loadForecast,
+			CloudCoverage:  weather.CloudCoverage,
+			WeatherSymbol:  weather.WeatherSymbol,
+			AirTemperature: weather.AirTemperature,
 		})
 	}
 
@@ -232,8 +240,9 @@ func (s *MinerScheduler) buildMPCForecast(ctx context.Context, config *Config, p
 
 // WeatherData represents weather information for a specific hour
 type WeatherData struct {
-	CloudCoverage float64 // % cloud coverage (0-100)
-	WeatherSymbol string  // weather condition symbol
+	CloudCoverage  float64 // % cloud coverage (0-100)
+	WeatherSymbol  string  // weather condition symbol
+	AirTemperature float64 // °C air temperature
 }
 
 // getSolarForecast gets solar power forecast from weather data
@@ -254,11 +263,12 @@ func (s *MinerScheduler) getSolarForecast(config *Config, now time.Time, weather
 
 	for i := range 36 {
 		futureTime := now.Add(time.Duration(i) * time.Hour)
-		solarPower, cloudCoverage, weatherSymbol := s.estimateSolarPowerFromWeather(weatherForecast, futureTime, config.MaxSolarPower, currentPVPower)
+		solarPower, cloudCoverage, weatherSymbol, airTemp := s.estimateSolarPowerFromWeather(weatherForecast, futureTime, config.MaxSolarPower, currentPVPower)
 		solarForecast[i] = solarPower
 		weatherData[i] = WeatherData{
-			CloudCoverage: cloudCoverage,
-			WeatherSymbol: weatherSymbol,
+			CloudCoverage:  cloudCoverage,
+			WeatherSymbol:  weatherSymbol,
+			AirTemperature: airTemp,
 		}
 	}
 	solarForecast[0] = currentPVPower
@@ -293,12 +303,13 @@ func (s *MinerScheduler) getOrFetchWeatherForecast(config *Config) (*meteo.METJS
 }
 
 // estimateSolarPowerFromWeather estimates solar power output from weather data
-func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONForecast, targetTime time.Time, peakPower float64, currentPVPower float64) (float64, float64, string) {
+func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONForecast, targetTime time.Time, peakPower float64, currentPVPower float64) (float64, float64, string, float64) {
 	cloudCoverage := 0.0
 	weatherSymbol := ""
+	airTemperature := 0.0
 
 	if forecast.Properties == nil || len(forecast.Properties.Timeseries) == 0 {
-		return 0, cloudCoverage, weatherSymbol
+		return 0, cloudCoverage, weatherSymbol, airTemperature
 	}
 
 	// Find closest time step
@@ -317,7 +328,7 @@ func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONFo
 	}
 
 	if closestStep == nil || closestStep.Data == nil || closestStep.Data.Instant == nil || closestStep.Data.Instant.Details == nil {
-		return 0, cloudCoverage, weatherSymbol
+		return 0, cloudCoverage, weatherSymbol, airTemperature
 	}
 
 	details := closestStep.Data.Instant.Details
@@ -332,6 +343,11 @@ func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONFo
 		weatherSymbol = string(*symbol)
 	}
 
+	// Get air temperature
+	if details.AirTemperature != nil {
+		airTemperature = *details.AirTemperature
+	}
+
 	// Get location from config
 	config := s.GetConfig()
 	lat := config.Latitude
@@ -344,7 +360,7 @@ func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONFo
 
 	// Check if we're between sunrise and sunset
 	if targetTime.Before(sunrise) || targetTime.After(sunset) {
-		return 0, cloudCoverage, weatherSymbol // No sun available
+		return 0, cloudCoverage, weatherSymbol, airTemperature // No sun available
 	}
 
 	// Get solar position to calculate altitude angle
@@ -356,14 +372,14 @@ func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONFo
 	// Use sine of altitude as a factor (0 at horizon, 1 at zenith)
 	solarAngleFactor := math.Sin(altitude)
 	if solarAngleFactor < 0 {
-		return 0, cloudCoverage, weatherSymbol
+		return 0, cloudCoverage, weatherSymbol, airTemperature
 	}
 
 	// Check for snow conditions - PV panels covered by snow produce zero power
 	if symbol := closestStep.GetSymbolCode(); symbol != nil {
 		if symbol.HasSnow() {
 			s.logger.Printf("Snow detected in weather forecast at %s, setting solar power to zero", targetTime.Format(time.RFC3339))
-			return 0, cloudCoverage, weatherSymbol
+			return 0, cloudCoverage, weatherSymbol, airTemperature
 		}
 	}
 
@@ -373,7 +389,7 @@ func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONFo
 	if currentPVPower < 0.1 && expectedPower > 1.0 && time.Until(targetTime).Hours() < 1 {
 		// Current power is essentially zero but we expect power - likely snow covered
 		s.logger.Printf("Current PV power is zero (%.2f kW) but forecast expects %.2f kW - panels may be snow covered", currentPVPower, expectedPower)
-		return 0, cloudCoverage, weatherSymbol
+		return 0, cloudCoverage, weatherSymbol, airTemperature
 	}
 
 	// Cloud factor (0-1, where 1 = no clouds)
@@ -386,7 +402,7 @@ func (s *MinerScheduler) estimateSolarPowerFromWeather(forecast *meteo.METJSONFo
 	// Estimate solar power
 	solarPower := peakPower * solarAngleFactor * cloudFactor
 
-	return solarPower, cloudCoverage, weatherSymbol
+	return solarPower, cloudCoverage, weatherSymbol, airTemperature
 }
 
 // estimateLoadForecast estimates power load based on price and available power

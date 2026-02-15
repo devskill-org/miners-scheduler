@@ -60,12 +60,14 @@ type MPCDecisionInfo struct {
 	BatterySOC       float64 `json:"battery_soc"`
 	Profit           float64 `json:"profit"`
 	// Forecast data used for this decision
-	ImportPrice   float64 `json:"import_price"`
-	ExportPrice   float64 `json:"export_price"`
-	SolarForecast float64 `json:"solar_forecast"`
-	LoadForecast  float64 `json:"load_forecast"`
-	CloudCoverage float64 `json:"cloud_coverage"`
-	WeatherSymbol string  `json:"weather_symbol"`
+	ImportPrice        float64 `json:"import_price"`
+	ExportPrice        float64 `json:"export_price"`
+	SolarForecast      float64 `json:"solar_forecast"`
+	LoadForecast       float64 `json:"load_forecast"`
+	CloudCoverage      float64 `json:"cloud_coverage"`
+	WeatherSymbol      string  `json:"weather_symbol"`
+	BatteryAvgCellTemp float64 `json:"battery_avg_cell_temp"`
+	AirTemperature     float64 `json:"air_temperature"`
 }
 
 // SystemHealth represents system-level health information
@@ -202,20 +204,22 @@ func (hs *WebServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 	mpcDecisionsInfo := make([]MPCDecisionInfo, 0, len(mpcDecisions))
 	for _, dec := range mpcDecisions {
 		mpcDecisionsInfo = append(mpcDecisionsInfo, MPCDecisionInfo{
-			Hour:             dec.Hour,
-			Timestamp:        dec.Timestamp,
-			BatteryCharge:    dec.BatteryCharge,
-			BatteryDischarge: dec.BatteryDischarge,
-			GridImport:       dec.GridImport,
-			GridExport:       dec.GridExport,
-			BatterySOC:       dec.BatterySOC,
-			Profit:           dec.Profit,
-			ImportPrice:      dec.ImportPrice,
-			ExportPrice:      dec.ExportPrice,
-			SolarForecast:    dec.SolarForecast,
-			LoadForecast:     dec.LoadForecast,
-			CloudCoverage:    dec.CloudCoverage,
-			WeatherSymbol:    dec.WeatherSymbol,
+			Hour:               dec.Hour,
+			Timestamp:          dec.Timestamp,
+			BatteryCharge:      dec.BatteryCharge,
+			BatteryDischarge:   dec.BatteryDischarge,
+			GridImport:         dec.GridImport,
+			GridExport:         dec.GridExport,
+			BatterySOC:         dec.BatterySOC,
+			Profit:             dec.Profit,
+			ImportPrice:        dec.ImportPrice,
+			ExportPrice:        dec.ExportPrice,
+			SolarForecast:      dec.SolarForecast,
+			LoadForecast:       dec.LoadForecast,
+			CloudCoverage:      dec.CloudCoverage,
+			WeatherSymbol:      dec.WeatherSymbol,
+			BatteryAvgCellTemp: dec.BatteryAvgCellTemp,
+			AirTemperature:     dec.AirTemperature,
 		})
 	}
 
@@ -498,20 +502,22 @@ func (hs *WebServer) buildStatusData() map[string]any {
 	mpcDecisionsInfo := make([]MPCDecisionInfo, 0, len(mpcDecisions))
 	for _, dec := range mpcDecisions {
 		mpcDecisionsInfo = append(mpcDecisionsInfo, MPCDecisionInfo{
-			Hour:             dec.Hour,
-			Timestamp:        dec.Timestamp,
-			BatteryCharge:    dec.BatteryCharge,
-			BatteryDischarge: dec.BatteryDischarge,
-			GridImport:       dec.GridImport,
-			GridExport:       dec.GridExport,
-			BatterySOC:       dec.BatterySOC,
-			Profit:           dec.Profit,
-			ImportPrice:      dec.ImportPrice,
-			ExportPrice:      dec.ExportPrice,
-			SolarForecast:    dec.SolarForecast,
-			LoadForecast:     dec.LoadForecast,
-			CloudCoverage:    dec.CloudCoverage,
-			WeatherSymbol:    dec.WeatherSymbol,
+			Hour:               dec.Hour,
+			Timestamp:          dec.Timestamp,
+			BatteryCharge:      dec.BatteryCharge,
+			BatteryDischarge:   dec.BatteryDischarge,
+			GridImport:         dec.GridImport,
+			GridExport:         dec.GridExport,
+			BatterySOC:         dec.BatterySOC,
+			Profit:             dec.Profit,
+			ImportPrice:        dec.ImportPrice,
+			ExportPrice:        dec.ExportPrice,
+			SolarForecast:      dec.SolarForecast,
+			LoadForecast:       dec.LoadForecast,
+			CloudCoverage:      dec.CloudCoverage,
+			WeatherSymbol:      dec.WeatherSymbol,
+			BatteryAvgCellTemp: dec.BatteryAvgCellTemp,
+			AirTemperature:     dec.AirTemperature,
 		})
 	}
 

@@ -166,6 +166,12 @@ function generateMPCDecisions(): MPCDecisionInfo[] {
   const decisions: MPCDecisionInfo[] = [];
   const currentTime = new Date();
   const currentMinute = currentTime.getMinutes();
+  
+  // Simulate battery temperature (typically 20-30°C for normal operation)
+  const baseBatteryTemp = 22 + Math.random() * 6; // 22-28°C range
+  
+  // Simulate base air temperature (varies by time of day)
+  const baseAirTemp = 10 + Math.random() * 5; // 10-15°C base range
 
   // Calculate minutes to next 15-minute boundary (0, 15, 30, or 45)
   const nextBoundary = Math.ceil(currentMinute / 15) * 15;
@@ -245,6 +251,8 @@ function generateMPCDecisions(): MPCDecisionInfo[] {
       load_forecast: loadForecast,
       cloud_coverage: cloudCoverage,
       weather_symbol: getWeatherSymbol(hour),
+      battery_avg_cell_temp: baseBatteryTemp + (Math.random() * 2 - 1), // Small variation around base temp
+      air_temperature: baseAirTemp + (hour - 12) * 0.5 + (Math.random() * 2 - 1), // Warmer in afternoon, cooler at night
     });
   }
 

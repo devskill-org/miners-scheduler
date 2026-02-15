@@ -881,6 +881,7 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
                         style={{
                           textAlign: "center",
                           borderBottom: "1px solid var(--color-border)",
+                          borderLeft: "2px solid var(--color-border)",
                         }}
                       >
                         {hour.toString().padStart(2, "0")}:00
@@ -890,18 +891,26 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
                 </tr>
                 {/* Minute row */}
                 <tr>
-                  {decisions.map((decision) => {
+                  {decisions.map((decision, index) => {
                     const date = new Date(decision.timestamp * 1000);
                     const minute = date
                       .getMinutes()
                       .toString()
                       .padStart(2, "0");
+
+                    // Check if this is the start of a new hour
+                    const isHourStart = index === 0 ||
+                      new Date(decisions[index - 1].timestamp * 1000).getHours() !== date.getHours();
+
                     return (
                       <th
                         key={decision.timestamp}
-                        style={{ fontSize: "0.8em" }}
+                        style={{
+                          fontSize: "0.8em",
+                          borderLeft: isHourStart ? "2px solid var(--color-border)" : undefined,
+                        }}
                       >
-                        :{minute}
+                        {minute}
                       </th>
                     );
                   })}
@@ -910,10 +919,17 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
               <tbody>
                 <tr>
                   <th>Battery Action (kW)</th>
-                  {decisions.map((decision) => {
+                  {decisions.map((decision, index) => {
                     const batteryAction = getBatteryAction(decision);
+                    const date = new Date(decision.timestamp * 1000);
+                    const isHourStart = index === 0 ||
+                      new Date(decisions[index - 1].timestamp * 1000).getHours() !== date.getHours();
+
                     return (
-                      <td key={decision.timestamp}>
+                      <td
+                        key={decision.timestamp}
+                        style={{ borderLeft: isHourStart ? "2px solid var(--color-border)" : undefined }}
+                      >
                         <span className={getActionClass(batteryAction.action)}>
                           {batteryAction.power > 0
                             ? batteryAction.power.toFixed(1)
@@ -925,10 +941,17 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
                 </tr>
                 <tr>
                   <th>Grid Action (kW)</th>
-                  {decisions.map((decision) => {
+                  {decisions.map((decision, index) => {
                     const gridAction = getGridAction(decision);
+                    const date = new Date(decision.timestamp * 1000);
+                    const isHourStart = index === 0 ||
+                      new Date(decisions[index - 1].timestamp * 1000).getHours() !== date.getHours();
+
                     return (
-                      <td key={decision.timestamp}>
+                      <td
+                        key={decision.timestamp}
+                        style={{ borderLeft: isHourStart ? "2px solid var(--color-border)" : undefined }}
+                      >
                         <span className={getActionClass(gridAction.action)}>
                           {gridAction.power > 0
                             ? gridAction.power.toFixed(1)
@@ -940,61 +963,222 @@ export function MPCDecisions({ decisions }: MPCDecisionsProps) {
                 </tr>
                 <tr>
                   <th>SOC (%)</th>
-                  {decisions.map((decision) => (
-                    <td key={decision.timestamp}>
-                      {(decision.battery_soc * 100).toFixed(1)}
-                    </td>
-                  ))}
+                  {decisions.map((decision, index) => {
+                    const date = new Date(decision.timestamp * 1000);
+                    const isHourStart = index === 0 ||
+                      new Date(decisions[index - 1].timestamp * 1000).getHours() !== date.getHours();
+
+                    return (
+                      <td
+                        key={decision.timestamp}
+                        style={{ borderLeft: isHourStart ? "2px solid var(--color-border)" : undefined }}
+                      >
+                        {(decision.battery_soc * 100).toFixed(1)}
+                      </td>
+                    );
+                  })}
                 </tr>
 
                 <tr>
                   <th>Solar (kW)</th>
-                  {decisions.map((decision) => (
-                    <td key={decision.timestamp}>
-                      {decision.solar_forecast.toFixed(1)}
-                    </td>
-                  ))}
+                  {decisions.map((decision, index) => {
+                    const date = new Date(decision.timestamp * 1000);
+                    const isHourStart = index === 0 ||
+                      new Date(decisions[index - 1].timestamp * 1000).getHours() !== date.getHours();
+
+                    return (
+                      <td
+                        key={decision.timestamp}
+                        style={{ borderLeft: isHourStart ? "2px solid var(--color-border)" : undefined }}
+                      >
+                        {decision.solar_forecast.toFixed(1)}
+                      </td>
+                    );
+                  })}
                 </tr>
                 <tr>
                   <th>Load (kW)</th>
-                  {decisions.map((decision) => (
-                    <td key={decision.timestamp}>
-                      {decision.load_forecast.toFixed(1)}
-                    </td>
-                  ))}
+                  {decisions.map((decision, index) => {
+                    const date = new Date(decision.timestamp * 1000);
+                    const isHourStart = index === 0 ||
+                      new Date(decisions[index - 1].timestamp * 1000).getHours() !== date.getHours();
+
+                    return (
+                      <td
+                        key={decision.timestamp}
+                        style={{ borderLeft: isHourStart ? "2px solid var(--color-border)" : undefined }}
+                      >
+                        {decision.load_forecast.toFixed(1)}
+                      </td>
+                    );
+                  })}
                 </tr>
                 <tr>
                   <th>Cloud (%)</th>
-                  {decisions.map((decision) => (
-                    <td key={decision.timestamp}>
-                      {decision.cloud_coverage.toFixed(0)}
-                    </td>
-                  ))}
+                  {(() => {
+                    const hourGroups: Array<{
+                      groupKey: string;
+                      count: number;
+                      cloudCoverage: number;
+                    }> = [];
+                    let currentGroupKey: string | null = null;
+
+                    decisions.forEach((decision) => {
+                      const date = new Date(decision.timestamp * 1000);
+                      const dateKey = `${date.getMonth() + 1}/${date.getDate()}`;
+                      const hour = date.getHours();
+                      const groupKey = `${dateKey}-${hour}`;
+
+                      if (currentGroupKey === groupKey) {
+                        hourGroups[hourGroups.length - 1].count++;
+                      } else {
+                        hourGroups.push({
+                          groupKey,
+                          count: 1,
+                          cloudCoverage: decision.cloud_coverage,
+                        });
+                        currentGroupKey = groupKey;
+                      }
+                    });
+
+                    return hourGroups.map(({ groupKey, count, cloudCoverage }) => (
+                      <td
+                        key={groupKey}
+                        colSpan={count}
+                        style={{
+                          textAlign: "center",
+                          borderLeft: "2px solid var(--color-border)",
+                        }}
+                      >
+                        {cloudCoverage.toFixed(0)}
+                      </td>
+                    ));
+                  })()}
                 </tr>
                 <tr>
                   <th>Weather</th>
-                  {decisions.map((decision) => (
-                    <td
-                      key={decision.timestamp}
-                      title={decision.weather_symbol || "Unknown"}
-                    >
-                      {getWeatherIcon(decision.weather_symbol)}
-                    </td>
-                  ))}
+                  {(() => {
+                    const hourGroups: Array<{
+                      groupKey: string;
+                      count: number;
+                      weatherSymbol: string;
+                    }> = [];
+                    let currentGroupKey: string | null = null;
+
+                    decisions.forEach((decision) => {
+                      const date = new Date(decision.timestamp * 1000);
+                      const dateKey = `${date.getMonth() + 1}/${date.getDate()}`;
+                      const hour = date.getHours();
+                      const groupKey = `${dateKey}-${hour}`;
+
+                      if (currentGroupKey === groupKey) {
+                        hourGroups[hourGroups.length - 1].count++;
+                      } else {
+                        hourGroups.push({
+                          groupKey,
+                          count: 1,
+                          weatherSymbol: decision.weather_symbol,
+                        });
+                        currentGroupKey = groupKey;
+                      }
+                    });
+
+                    return hourGroups.map(({ groupKey, count, weatherSymbol }) => (
+                      <td
+                        key={groupKey}
+                        colSpan={count}
+                        title={weatherSymbol || "Unknown"}
+                        style={{
+                          textAlign: "center",
+                          borderLeft: "2px solid var(--color-border)",
+                        }}
+                      >
+                        {getWeatherIcon(weatherSymbol)}
+                      </td>
+                    ));
+                  })()}
+                </tr>
+                <tr>
+                  <th>Air Temp (°C)</th>
+                  {(() => {
+                    const hourGroups: Array<{
+                      groupKey: string;
+                      count: number;
+                      airTemperature: number;
+                    }> = [];
+                    let currentGroupKey: string | null = null;
+
+                    decisions.forEach((decision) => {
+                      const date = new Date(decision.timestamp * 1000);
+                      const dateKey = `${date.getMonth() + 1}/${date.getDate()}`;
+                      const hour = date.getHours();
+                      const groupKey = `${dateKey}-${hour}`;
+
+                      if (currentGroupKey === groupKey) {
+                        hourGroups[hourGroups.length - 1].count++;
+                      } else {
+                        hourGroups.push({
+                          groupKey,
+                          count: 1,
+                          airTemperature: decision.air_temperature,
+                        });
+                        currentGroupKey = groupKey;
+                      }
+                    });
+
+                    return hourGroups.map(({ groupKey, count, airTemperature }) => (
+                      <td
+                        key={groupKey}
+                        colSpan={count}
+                        style={{
+                          textAlign: "center",
+                          borderLeft: "2px solid var(--color-border)",
+                        }}
+                      >
+                        {airTemperature.toFixed(1)}
+                      </td>
+                    ));
+                  })()}
+                </tr>
+                <tr>
+                  <th>Avg Cell Temp (°C)</th>
+                  {decisions.map((decision, index) => {
+                    const date = new Date(decision.timestamp * 1000);
+                    const isHourStart = index === 0 ||
+                      new Date(decisions[index - 1].timestamp * 1000).getHours() !== date.getHours();
+
+                    return (
+                      <td
+                        key={decision.timestamp}
+                        style={{ borderLeft: isHourStart ? "2px solid var(--color-border)" : undefined }}
+                      >
+                        {decision.battery_avg_cell_temp?.toFixed(1) || "-"}
+                      </td>
+                    );
+                  })}
                 </tr>
                 <tr>
                   <th>Profit (€)</th>
-                  {decisions.map((decision) => (
-                    <td key={decision.timestamp}>
-                      <span
-                        className={
-                          decision.profit >= 0 ? "value-success" : "value-error"
-                        }
+                  {decisions.map((decision, index) => {
+                    const date = new Date(decision.timestamp * 1000);
+                    const isHourStart = index === 0 ||
+                      new Date(decisions[index - 1].timestamp * 1000).getHours() !== date.getHours();
+
+                    return (
+                      <td
+                        key={decision.timestamp}
+                        style={{ borderLeft: isHourStart ? "2px solid var(--color-border)" : undefined }}
                       >
-                        {Math.abs(decision.profit).toFixed(2)}
-                      </span>
-                    </td>
-                  ))}
+                        <span
+                          className={
+                            decision.profit >= 0 ? "value-success" : "value-error"
+                          }
+                        >
+                          {Math.abs(decision.profit).toFixed(2)}
+                        </span>
+                      </td>
+                    );
+                  })}
                 </tr>
               </tbody>
             </table>

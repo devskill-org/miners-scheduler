@@ -28,6 +28,7 @@ type TimeSlot struct {
 	LoadForecast  float64 // kW average for the time period
 	CloudCoverage float64 // % cloud coverage (0-100)
 	WeatherSymbol string  // weather condition symbol
+	AirTemperature float64 // °C air temperature
 }
 
 // ControlDecision represents the optimal control for one time slot (typically 15 minutes, configurable via check_price_interval)
@@ -43,12 +44,14 @@ type ControlDecision struct {
 	BatterySOC            float64 // percentage (0-1)
 	Profit                float64 // $ for this time period
 	// Forecast data used for this decision
-	ImportPrice   float64 // $/kWh
-	ExportPrice   float64 // $/kWh
-	SolarForecast float64 // kW average for the time period
-	LoadForecast  float64 // kW average for the time period
-	CloudCoverage float64 // % cloud coverage (0-100)
-	WeatherSymbol string  // weather condition symbol
+	ImportPrice        float64 // $/kWh
+	ExportPrice        float64 // $/kWh
+	SolarForecast      float64 // kW average for the time period
+	LoadForecast       float64 // kW average for the time period
+	CloudCoverage      float64 // % cloud coverage (0-100)
+	WeatherSymbol      string  // weather condition symbol
+	BatteryAvgCellTemp float64 // °C average cell temperature
+	AirTemperature     float64 // °C air temperature
 }
 
 // Controller implements Model Predictive Control
@@ -167,6 +170,7 @@ func (mpc *Controller) optimizeWithForecast(forecast []TimeSlot, includeSolar bo
 					dp[t+1][newSOCIdx].decision.LoadForecast = slot.LoadForecast
 					dp[t+1][newSOCIdx].decision.CloudCoverage = slot.CloudCoverage
 					dp[t+1][newSOCIdx].decision.WeatherSymbol = slot.WeatherSymbol
+					dp[t+1][newSOCIdx].decision.AirTemperature = slot.AirTemperature
 					dp[t+1][newSOCIdx].prevSOC = socIdx
 				}
 			}
