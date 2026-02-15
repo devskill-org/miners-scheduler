@@ -14,7 +14,10 @@ CREATE TABLE mpc_decisions (
     solar_forecast NUMERIC NOT NULL,
     load_forecast NUMERIC NOT NULL,
     cloud_coverage NUMERIC,
-    weather_symbol VARCHAR(100)
+    weather_symbol VARCHAR(100),
+    battery_avg_cell_temp NUMERIC,
+    air_temperature NUMERIC,
+    battery_preheat_active BOOLEAN
 );
 
 -- Column descriptions:
@@ -34,3 +37,6 @@ CREATE TABLE mpc_decisions (
 -- load_forecast: Forecasted load consumption in kW (average for the time period)
 -- cloud_coverage: Cloud coverage percentage (0-100)
 -- weather_symbol: Weather condition symbol code
+-- battery_avg_cell_temp: Forecasted battery average cell temperature in °C for this time slot
+-- air_temperature: Forecasted air temperature in °C for this time slot
+-- battery_preheat_active: Whether battery preheating is active during this time slot (true when charging below threshold temperature)

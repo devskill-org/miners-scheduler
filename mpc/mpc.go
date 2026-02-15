@@ -7,27 +7,30 @@ import (
 
 // SystemConfig holds the inverter system configuration
 type SystemConfig struct {
-	BatteryCapacity        float64 // kWh
-	BatteryMaxCharge       float64 // kW
-	BatteryMaxDischarge    float64 // kW
-	BatteryMinSOC          float64 // percentage (0-1)
-	BatteryMaxSOC          float64 // percentage (0-1)
-	BatteryEfficiency      float64 // round-trip efficiency (0-1)
-	BatteryDegradationCost float64 // $/kWh cycled
-	MaxGridImport          float64 // kW
-	MaxGridExport          float64 // kW
+	BatteryCapacity             float64 // kWh
+	BatteryMaxCharge            float64 // kW
+	BatteryMaxDischarge         float64 // kW
+	BatteryMinSOC               float64 // percentage (0-1)
+	BatteryMaxSOC               float64 // percentage (0-1)
+	BatteryEfficiency           float64 // round-trip efficiency (0-1)
+	BatteryDegradationCost      float64 // $/kWh cycled
+	MaxGridImport               float64 // kW
+	MaxGridExport               float64 // kW
+	BatteryPreHeatPower         float64 // kW - power consumption of battery preheating when active
+	BatteryPreHeatTempThreshold float64 // °C - temperature threshold below which battery preheating activates
+	BatteryThermalTimeConstant  float64 // fraction per time slot - rate at which battery temperature approaches air temperature (0-1)
 }
 
 // TimeSlot represents one time period of operation (typically 15 minutes, configurable via check_price_interval)
 type TimeSlot struct {
-	Hour          int
-	Timestamp     int64   // Unix timestamp when this time slot begins
-	ImportPrice   float64 // $/kWh
-	ExportPrice   float64 // $/kWh
-	SolarForecast float64 // kW average for the time period
-	LoadForecast  float64 // kW average for the time period
-	CloudCoverage float64 // % cloud coverage (0-100)
-	WeatherSymbol string  // weather condition symbol
+	Hour           int
+	Timestamp      int64   // Unix timestamp when this time slot begins
+	ImportPrice    float64 // $/kWh
+	ExportPrice    float64 // $/kWh
+	SolarForecast  float64 // kW average for the time period
+	LoadForecast   float64 // kW average for the time period
+	CloudCoverage  float64 // % cloud coverage (0-100)
+	WeatherSymbol  string  // weather condition symbol
 	AirTemperature float64 // °C air temperature
 }
 
@@ -43,6 +46,7 @@ type ControlDecision struct {
 	GridExport            float64 // kW (positive = exporting)
 	BatterySOC            float64 // percentage (0-1)
 	Profit                float64 // $ for this time period
+	BatteryPreHeatActive  bool    // true if battery preheating is active during this time slot
 	// Forecast data used for this decision
 	ImportPrice        float64 // $/kWh
 	ExportPrice        float64 // $/kWh
@@ -56,17 +60,19 @@ type ControlDecision struct {
 
 // Controller implements Model Predictive Control
 type Controller struct {
-	Config     SystemConfig
-	Horizon    int // number of time periods to look ahead
-	CurrentSOC float64
+	Config                SystemConfig
+	Horizon               int     // number of time periods to look ahead
+	CurrentSOC            float64
+	CurrentBatteryTemp    float64 // °C current battery temperature
 }
 
 // NewController creates a new MPC controller
 func NewController(config SystemConfig, horizon int, initialSOC float64) *Controller {
 	return &Controller{
-		Config:     config,
-		Horizon:    horizon,
-		CurrentSOC: initialSOC,
+		Config:             config,
+		Horizon:            horizon,
+		CurrentSOC:         initialSOC,
+		CurrentBatteryTemp: 20.0, // Default to room temperature
 	}
 }
 
@@ -111,11 +117,12 @@ func (mpc *Controller) optimizeWithForecast(forecast []TimeSlot, includeSolar bo
 	socSteps := 500
 	socStep := (mpc.Config.BatteryMaxSOC - mpc.Config.BatteryMinSOC) / float64(socSteps)
 
-	// DP table: [time][soc_index] -> (best_profit, best_decision)
+	// DP table: [time][soc_index] -> (best_profit, best_decision, battery_temp)
 	type dpState struct {
-		profit   float64
-		decision ControlDecision
-		prevSOC  int
+		profit      float64
+		decision    ControlDecision
+		prevSOC     int
+		batteryTemp float64 // °C battery temperature at this state
 	}
 
 	dp := make([][]dpState, len(forecast)+1)
@@ -126,9 +133,10 @@ func (mpc *Controller) optimizeWithForecast(forecast []TimeSlot, includeSolar bo
 		}
 	}
 
-	// Initialize with current SOC
+	// Initialize with current SOC and battery temperature
 	startSOCIndex := mpc.socToIndex(mpc.CurrentSOC, socStep)
 	dp[0][startSOCIndex].profit = 0
+	dp[0][startSOCIndex].batteryTemp = mpc.CurrentBatteryTemp
 
 	// Forward pass - build DP table
 	for t := range forecast {
@@ -143,9 +151,10 @@ func (mpc *Controller) optimizeWithForecast(forecast []TimeSlot, includeSolar bo
 			}
 
 			currentSOC := mpc.indexToSOC(socIdx, socStep)
+			currentBatteryTemp := dp[t][socIdx].batteryTemp
 
 			// Try different control decisions
-			decisions := mpc.generateFeasibleDecisions(currentSOC, slot)
+			decisions := mpc.generateFeasibleDecisions(currentSOC, currentBatteryTemp, slot)
 
 			for _, dec := range decisions {
 				newSOC := mpc.calculateNewSOC(currentSOC, dec.BatteryCharge, dec.BatteryDischarge)
@@ -154,6 +163,9 @@ func (mpc *Controller) optimizeWithForecast(forecast []TimeSlot, includeSolar bo
 				if newSOCIdx < 0 || newSOCIdx > socSteps {
 					continue
 				}
+
+				// Calculate next battery temperature based on this decision
+				newBatteryTemp := mpc.calculateNextBatteryTemp(currentBatteryTemp, slot.AirTemperature, dec.BatteryCharge > 0, dec.BatteryPreHeatActive)
 
 				profit := mpc.calculateProfit(dec, slot)
 				totalProfit := dp[t][socIdx].profit + profit
@@ -171,7 +183,9 @@ func (mpc *Controller) optimizeWithForecast(forecast []TimeSlot, includeSolar bo
 					dp[t+1][newSOCIdx].decision.CloudCoverage = slot.CloudCoverage
 					dp[t+1][newSOCIdx].decision.WeatherSymbol = slot.WeatherSymbol
 					dp[t+1][newSOCIdx].decision.AirTemperature = slot.AirTemperature
+					dp[t+1][newSOCIdx].decision.BatteryAvgCellTemp = currentBatteryTemp
 					dp[t+1][newSOCIdx].prevSOC = socIdx
+					dp[t+1][newSOCIdx].batteryTemp = newBatteryTemp
 				}
 			}
 		}
@@ -199,9 +213,32 @@ func (mpc *Controller) optimizeWithForecast(forecast []TimeSlot, includeSolar bo
 	return path
 }
 
+// calculateNextBatteryTemp calculates the battery temperature for the next time slot
+// based on current temperature, air temperature, and whether the battery is charging
+func (mpc *Controller) calculateNextBatteryTemp(currentTemp, airTemp float64, isCharging, isPreHeating bool) float64 {
+	if isCharging && isPreHeating {
+		// When charging with preheat, battery maintains temperature at threshold
+		return math.Max(currentTemp, mpc.Config.BatteryPreHeatTempThreshold)
+	}
+	
+	// When not charging or warm enough, battery temperature moves toward air temperature
+	// T(t+1) = T(t) + k * (T_air - T(t))
+	// This models natural cooling/heating toward ambient air temperature
+	tempDiff := airTemp - currentTemp
+	return currentTemp + mpc.Config.BatteryThermalTimeConstant*tempDiff
+}
+
 // generateFeasibleDecisions creates a set of feasible control decisions
-func (mpc *Controller) generateFeasibleDecisions(currentSOC float64, slot TimeSlot) []ControlDecision {
+func (mpc *Controller) generateFeasibleDecisions(currentSOC float64, currentBatteryTemp float64, slot TimeSlot) []ControlDecision {
 	decisions := []ControlDecision{}
+
+	// Determine if battery preheating would be needed based on battery temperature
+	// Battery preheating is only active when actually charging the battery
+	needsPreHeat := mpc.Config.BatteryPreHeatPower > 0 && currentBatteryTemp < mpc.Config.BatteryPreHeatTempThreshold
+	preHeatPower := 0.0
+	if needsPreHeat {
+		preHeatPower = mpc.Config.BatteryPreHeatPower
+	}
 
 	// Always include idle option
 	batteryActions := []struct {
@@ -242,16 +279,28 @@ func (mpc *Controller) generateFeasibleDecisions(currentSOC float64, slot TimeSl
 
 	// For each battery action, calculate power balance
 	for _, action := range batteryActions {
+		// Battery preheating is only active when we're actually charging and temp is below threshold
+		preHeatActive := needsPreHeat && action.charge > 0
+		
 		dec := ControlDecision{
-			Hour:             slot.Hour,
-			Timestamp:        slot.Timestamp,
-			BatteryCharge:    action.charge,
-			BatteryDischarge: action.discharge,
+			Hour:                 slot.Hour,
+			Timestamp:            slot.Timestamp,
+			BatteryCharge:        action.charge,
+			BatteryDischarge:     action.discharge,
+			BatteryPreHeatActive: preHeatActive,
 		}
 
-		// Power balance: Solar + GridImport + BatteryDischarge = Load + GridExport + BatteryCharge
+		// Power balance: Solar + GridImport + BatteryDischarge = Load + GridExport + BatteryCharge + BatteryPreHeat
+		// When battery preheating is active (battery is charging at low temp), it consumes extra power from the grid
 		netSolar := slot.SolarForecast
-		netLoad := slot.LoadForecast + action.charge/mpc.Config.BatteryEfficiency
+		extraLoad := 0.0
+		
+		// Battery preheating only consumes power when battery is charging
+		if preHeatActive {
+			extraLoad = preHeatPower
+		}
+		
+		netLoad := slot.LoadForecast + action.charge/mpc.Config.BatteryEfficiency + extraLoad
 		netSupply := netSolar + action.discharge*mpc.Config.BatteryEfficiency
 
 		balance := netSupply - netLoad
@@ -276,14 +325,15 @@ func (mpc *Controller) generateFeasibleDecisions(currentSOC float64, slot TimeSl
 }
 
 // calculateProfit computes the profit for a decision
-// The power balance equation ensures: Solar + GridImport + BatteryDischarge*eff = Load + GridExport + BatteryCharge/eff
-// Therefore, GridImport and GridExport already reflect the effect of battery operations.
+// The power balance equation ensures: Solar + GridImport + BatteryDischarge*eff = Load + GridExport + BatteryCharge/eff + BatteryPreHeat
+// Therefore, GridImport and GridExport already reflect the effect of battery operations and battery preheating.
 // Profit is simply: revenue from exports - cost of imports - degradation cost
+// Note: The battery preheating cost is already included in GridImport when battery is charging at low temperatures
 func (mpc *Controller) calculateProfit(dec ControlDecision, slot TimeSlot) float64 {
 	// Revenue from exporting to grid
 	revenue := dec.GridExport * slot.ExportPrice
 
-	// Cost of importing from grid
+	// Cost of importing from grid (already includes battery preheating consumption when active)
 	importCost := dec.GridImport * slot.ImportPrice
 
 	// Battery degradation cost (wear and tear from cycling)
@@ -292,13 +342,15 @@ func (mpc *Controller) calculateProfit(dec ControlDecision, slot TimeSlot) float
 
 	// Net profit:
 	// + Revenue from exports (GridExport already accounts for battery discharge to grid)
-	// - Cost of imports (GridImport already accounts for battery charging and reduced imports from discharge)
+	// - Cost of imports (GridImport already accounts for battery charging, battery preheating, and reduced imports from discharge)
 	// - Battery degradation (wear and tear cost)
 	//
 	// This correctly incentivizes arbitrage:
 	// - Charging at low import prices reduces profit by importCost
 	// - Discharging at high export prices increases profit by revenue
+	// - When battery temp is low (<10°C), charging incurs additional battery preheating cost (700W)
 	// - The DP optimizer will naturally prefer charge-low/discharge-high strategies
+	// - The optimizer will avoid charging at low temperatures unless prices are very favorable
 	profit := revenue - importCost - degradationCost
 
 	return profit

@@ -44,40 +44,46 @@ func TestMPCPersistence_SaveAndLoad(t *testing.T) {
 	now := time.Now().Unix()
 	decisions := []mpc.ControlDecision{
 		{
-			Hour:                 0,
-			Timestamp:            now + 3600,
-			BatteryCharge:        10.5,
-			BatteryChargeFromPV:  10.5,
-			BatteryChargeFromGrid: 5.0,
-			BatteryDischarge:     0,
-			GridImport:           5.0,
-			GridExport:           0,
-			BatterySOC:           0.6,
-			Profit:               2.5,
-			ImportPrice:          0.1,
-			ExportPrice:          0.05,
-			SolarForecast:        15.0,
-			LoadForecast:         10.0,
-			CloudCoverage:        30.0,
-			WeatherSymbol:        "clearsky_day",
+			Hour:                  0,
+			Timestamp:             now + 3600,
+			BatteryCharge:         10.5,
+			BatteryChargeFromPV:   10.5,
+			BatteryChargeFromGrid:  5.0,
+			BatteryDischarge:      0,
+			GridImport:            5.0,
+			GridExport:            0,
+			BatterySOC:            0.6,
+			Profit:                2.5,
+			ImportPrice:           0.1,
+			ExportPrice:           0.05,
+			SolarForecast:         15.0,
+			LoadForecast:          10.0,
+			CloudCoverage:         30.0,
+			WeatherSymbol:         "clearsky_day",
+			BatteryAvgCellTemp:    15.0,
+			AirTemperature:        18.0,
+			BatteryPreHeatActive:  false,
 		},
 		{
-			Hour:                 1,
-			Timestamp:            now + 7200,
-			BatteryCharge:        0,
-			BatteryChargeFromPV:  0,
-			BatteryChargeFromGrid: 0,
-			BatteryDischarge:     8.0,
-			GridImport:           0,
-			GridExport:           3.0,
-			BatterySOC:           0.5,
-			Profit:               3.2,
-			ImportPrice:          0.12,
-			ExportPrice:          0.06,
-			SolarForecast:        20.0,
-			LoadForecast:         12.0,
-			CloudCoverage:        10.0,
-			WeatherSymbol:        "fair_day",
+			Hour:                  1,
+			Timestamp:             now + 7200,
+			BatteryCharge:         0,
+			BatteryChargeFromPV:   0,
+			BatteryChargeFromGrid:  0,
+			BatteryDischarge:      8.0,
+			GridImport:            0,
+			GridExport:            3.0,
+			BatterySOC:            0.5,
+			Profit:                3.2,
+			ImportPrice:           0.12,
+			ExportPrice:           0.06,
+			SolarForecast:         20.0,
+			LoadForecast:          12.0,
+			CloudCoverage:         10.0,
+			WeatherSymbol:         "fair_day",
+			BatteryAvgCellTemp:    8.0,
+			AirTemperature:        5.0,
+			BatteryPreHeatActive:  true,
 		},
 	}
 
@@ -115,6 +121,15 @@ func TestMPCPersistence_SaveAndLoad(t *testing.T) {
 		}
 		if decision.Profit != decisions[i].Profit {
 			t.Errorf("Decision %d: expected profit %.2f, got %.2f", i, decisions[i].Profit, decision.Profit)
+		}
+		if decision.BatteryAvgCellTemp != decisions[i].BatteryAvgCellTemp {
+			t.Errorf("Decision %d: expected battery_avg_cell_temp %.2f, got %.2f", i, decisions[i].BatteryAvgCellTemp, decision.BatteryAvgCellTemp)
+		}
+		if decision.AirTemperature != decisions[i].AirTemperature {
+			t.Errorf("Decision %d: expected air_temperature %.2f, got %.2f", i, decisions[i].AirTemperature, decision.AirTemperature)
+		}
+		if decision.BatteryPreHeatActive != decisions[i].BatteryPreHeatActive {
+			t.Errorf("Decision %d: expected battery_preheat_active %v, got %v", i, decisions[i].BatteryPreHeatActive, decision.BatteryPreHeatActive)
 		}
 	}
 }

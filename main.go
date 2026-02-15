@@ -132,15 +132,15 @@ func runMPCOptimize(config *scheduler.Config) {
 	fmt.Printf("Total decisions: %d\n\n", len(decisions))
 
 	// Print table header
-	fmt.Println("┌──────┬─────────────────────┬──────────┬──────────┬──────────┬───────────┬────────────┬────────────┬────────────┬──────────┬────────────┬────────────┬──────────┐")
-	fmt.Println("│ Hour │     Timestamp       │ Batt SOC │ Chr (PV) │ Chr (Grd)│ Bat Disch │ Grid Imprt │ Grid Exprt │ Solar Fcst │ Load Fst │ Imprt Prce │ Exprt Prce │  Profit  │")
-	fmt.Println("│      │                     │    (%)   │   (kW)   │   (kW)   │   (kW)    │    (kW)    │    (kW)    │    (kW)    │   (kW)   │ (EUR/MWh)  │ (EUR/MWh)  │   (EUR)  │")
-	fmt.Println("├──────┼─────────────────────┼──────────┼──────────┼──────────┼───────────┼────────────┼────────────┼────────────┼──────────┼────────────┼────────────┼──────────┤")
+	fmt.Println("┌──────┬─────────────────────┬──────────┬──────────┬──────────┬───────────┬────────────┬────────────┬────────────┬──────────┬────────────┬────────────┬──────────┬──────────┐")
+	fmt.Println("│ Hour │     Timestamp       │ Batt SOC │ Chr (PV) │ Chr (Grd)│ Bat Disch │ Grid Imprt │ Grid Exprt │ Solar Fcst │ Load Fst │ Imprt Prce │ Exprt Prce │ Bat Temp │  Profit  │")
+	fmt.Println("│      │                     │    (%)   │   (kW)   │   (kW)   │   (kW)    │    (kW)    │    (kW)    │    (kW)    │   (kW)   │ (EUR/MWh)  │ (EUR/MWh)  │   (°C)   │   (EUR)  │")
+	fmt.Println("├──────┼─────────────────────┼──────────┼──────────┼──────────┼───────────┼────────────┼────────────┼────────────┼──────────┼────────────┼────────────┼──────────┼──────────┤")
 
 	totalProfit := 0.0
 	for _, dec := range decisions {
 		timestamp := time.Unix(dec.Timestamp, 0).Format("2006-01-02 15:04")
-		fmt.Printf("│ %4d │ %19s │  %6.1f  │  %6.2f  │  %6.2f  │   %6.2f  │   %6.2f   │   %6.2f   │   %6.2f   │  %6.2f  │   %6.2f   │   %6.2f   │  %6.4f  │\n",
+		fmt.Printf("│ %4d │ %19s │  %6.1f  │  %6.2f  │  %6.2f  │   %6.2f  │   %6.2f   │   %6.2f   │   %6.2f   │  %6.2f  │   %6.2f   │   %6.2f   │  %6.1f  │  %6.4f  │\n",
 			dec.Hour,
 			timestamp,
 			dec.BatterySOC*100,
@@ -153,12 +153,13 @@ func runMPCOptimize(config *scheduler.Config) {
 			dec.LoadForecast,
 			dec.ImportPrice*1000,
 			dec.ExportPrice*1000,
+			dec.BatteryAvgCellTemp,
 			dec.Profit,
 		)
 		totalProfit += dec.Profit
 	}
 
-	fmt.Println("└──────┴─────────────────────┴──────────┴──────────┴──────────┴───────────┴────────────┴────────────┴────────────┴──────────┴────────────┴────────────┴──────────┘")
+	fmt.Println("└──────┴─────────────────────┴──────────┴──────────┴──────────┴───────────┴────────────┴────────────┴────────────┴──────────┴────────────┴────────────┴──────────┴──────────┘")
 	fmt.Println("\n========================================")
 	fmt.Println("SUMMARY")
 	fmt.Println("========================================")

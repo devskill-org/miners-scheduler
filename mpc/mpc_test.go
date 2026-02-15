@@ -708,6 +708,7 @@ func TestOptimizeShortHorizon(t *testing.T) {
 	}
 
 	mpc := NewController(config, 2, 0.5)
+	mpc.CurrentBatteryTemp = 5.0 // Below threshold
 	decisions := mpc.Optimize(forecast)
 
 	if len(decisions) != 2 {
@@ -799,4 +800,485 @@ func TestOptimizeHighSolar(t *testing.T) {
 	}
 
 	t.Logf("High solar scenario: Charge=%.3f, Export=%.3f", decisions[0].BatteryCharge, decisions[0].GridExport)
+}
+
+func TestOptimizeWithBatteryPreHeat(t *testing.T) {
+	config := SystemConfig{
+		BatteryCapacity:             10.0,
+		BatteryMaxCharge:            5.0,
+		BatteryMaxDischarge:         5.0,
+		BatteryMinSOC:               0.1,
+		BatteryMaxSOC:               0.9,
+		BatteryEfficiency:           0.9,
+		BatteryDegradationCost:      0.01,
+		MaxGridImport:               10.0,
+		MaxGridExport:               10.0,
+		BatteryPreHeatPower:         0.7,  // 700W battery preheating
+		BatteryPreHeatTempThreshold: 10.0, // 10°C threshold
+		BatteryThermalTimeConstant:  0.1,  // 10% thermal change per time slot
+	}
+
+	// Test 1: Cold battery (5°C) with arbitrage opportunity - battery preheating should activate
+	// Period 0: Cheap price (charge), Period 1: Expensive price (discharge)
+	forecast1 := []TimeSlot{
+		{
+			Hour:          0,
+			Timestamp:     1704326400,
+			ImportPrice:   0.05, // Very cheap - good time to charge
+			ExportPrice:   0.02,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: 5.0, // Cold air temperature
+		},
+		{
+			Hour:          1,
+			Timestamp:     1704330000,
+			ImportPrice:   0.30, // Expensive - good time to discharge
+			ExportPrice:   0.15,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: 5.0,
+		},
+	}
+
+	mpc1 := NewController(config, 2, 0.2) // Start at 20% SOC
+	mpc1.CurrentBatteryTemp = 5.0 // Below 10°C threshold
+	decisions1 := mpc1.Optimize(forecast1)
+
+	if len(decisions1) != 2 {
+		t.Fatalf("Expected 2 decisions, got %d", len(decisions1))
+	}
+
+	// Should charge in period 0 despite battery preheating cost
+	if decisions1[0].BatteryCharge <= 0 {
+		t.Error("Expected battery charging in cheap period even with battery preheating")
+	}
+
+	if !decisions1[0].BatteryPreHeatActive {
+		t.Error("Expected battery preheating to be active when battery temp is below threshold and charging")
+	}
+
+	// GridImport should include load + battery charge losses + battery preheat power
+	expectedMinImport := forecast1[0].LoadForecast + decisions1[0].BatteryCharge/config.BatteryEfficiency + config.BatteryPreHeatPower
+	if decisions1[0].GridImport < expectedMinImport-0.1 {
+		t.Errorf("GridImport (%.3f) should account for battery preheat power, expected at least %.3f",
+			decisions1[0].GridImport, expectedMinImport)
+	}
+
+	t.Logf("Cold battery - Period 0 (cheap): Charge=%.3f kW, GridImport=%.3f kW, BatteryPreHeat=%v",
+		decisions1[0].BatteryCharge, decisions1[0].GridImport, decisions1[0].BatteryPreHeatActive)
+	t.Logf("Cold battery - Period 1 (expensive): Discharge=%.3f kW, GridImport=%.3f kW",
+		decisions1[1].BatteryDischarge, decisions1[1].GridImport)
+
+	// Test 2: Warm battery (15°C) with same arbitrage opportunity - battery preheating should NOT activate
+	forecast2 := []TimeSlot{
+		{
+			Hour:          0,
+			Timestamp:     1704326400,
+			ImportPrice:   0.05,
+			ExportPrice:   0.02,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: 15.0,
+		},
+		{
+			Hour:          1,
+			Timestamp:     1704330000,
+			ImportPrice:   0.30,
+			ExportPrice:   0.15,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: 15.0,
+		},
+	}
+
+	mpc2 := NewController(config, 2, 0.5)
+	mpc2.CurrentBatteryTemp = 15.0 // Above 10°C threshold
+	decisions2 := mpc2.Optimize(forecast2)
+
+	if len(decisions2) != 2 {
+		t.Fatalf("Expected 2 decisions, got %d", len(decisions2))
+	}
+
+	if decisions2[0].BatteryPreHeatActive {
+		t.Error("Expected battery preheating to be inactive when battery temp is above threshold")
+	}
+
+	// Warm battery should charge more or have lower import cost (no battery preheating)
+	if decisions2[0].BatteryCharge > 0 && decisions1[0].BatteryCharge > 0 {
+		// Both charging: warm battery should have lower GridImport (no battery preheating)
+		if decisions2[0].GridImport >= decisions1[0].GridImport {
+			t.Errorf("Warm battery GridImport (%.3f) should be less than cold battery GridImport (%.3f)",
+				decisions2[0].GridImport, decisions1[0].GridImport)
+		}
+	}
+
+	t.Logf("Warm battery - Period 0 (cheap): Charge=%.3f kW, GridImport=%.3f kW, BatteryPreHeat=%v",
+		decisions2[0].BatteryCharge, decisions2[0].GridImport, decisions2[0].BatteryPreHeatActive)
+	t.Logf("Warm battery - Period 1 (expensive): Discharge=%.3f kW, GridImport=%.3f kW",
+		decisions2[1].BatteryDischarge, decisions2[1].GridImport)
+
+	// Test 3: Cold battery discharging - battery preheating should NOT activate
+	forecast3 := []TimeSlot{
+		{
+			Hour:          0,
+			Timestamp:     1704326400,
+			ImportPrice:   0.10,
+			ExportPrice:   0.15, // Good export price - incentivize discharge
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: 5.0,
+		},
+	}
+
+	mpc3 := NewController(config, 1, 0.8) // High SOC - can discharge
+	mpc3.CurrentBatteryTemp = 5.0 // Below 10°C threshold
+	decisions3 := mpc3.Optimize(forecast3)
+
+	if len(decisions3) != 1 {
+		t.Fatalf("Expected 1 decision, got %d", len(decisions3))
+	}
+
+	// If discharging, battery preheating should not be active
+	if decisions3[0].BatteryDischarge > 0 && decisions3[0].BatteryPreHeatActive {
+		t.Error("Battery preheating should not be active when discharging (only when charging)")
+	}
+
+	t.Logf("Cold battery discharging: Discharge=%.3f kW, BatteryPreHeat=%v",
+		decisions3[0].BatteryDischarge, decisions3[0].BatteryPreHeatActive)
+
+	// Test 4: Verify battery preheating status is recorded correctly
+	forecast4 := []TimeSlot{
+		{
+			Hour:          0,
+			Timestamp:     1704326400,
+			ImportPrice:   0.03, // Very cheap to encourage charging
+			ExportPrice:   0.01,
+			SolarForecast: 0.0,
+			LoadForecast:  0.5,
+			AirTemperature: 8.0,
+		},
+		{
+			Hour:          1,
+			Timestamp:     1704330000,
+			ImportPrice:   0.35, // Very expensive
+			ExportPrice:   0.20,
+			SolarForecast: 0.0,
+			LoadForecast:  0.5,
+			AirTemperature: 8.0,
+		},
+	}
+
+	mpc4 := NewController(config, 2, 0.2)
+	mpc4.CurrentBatteryTemp = 8.0 // Below threshold
+	decisions4 := mpc4.Optimize(forecast4)
+
+	if len(decisions4) != 2 {
+		t.Fatalf("Expected 2 decisions, got %d", len(decisions4))
+	}
+
+	// Period 0: Should charge at very cheap price
+	if decisions4[0].BatteryCharge > 0 && !decisions4[0].BatteryPreHeatActive {
+		t.Error("Expected battery preheating active when charging with cold battery")
+	}
+
+	// Period 1: If discharging, battery preheating should not be active
+	if decisions4[1].BatteryDischarge > 0 && decisions4[1].BatteryPreHeatActive {
+		t.Error("Expected battery preheating inactive when discharging")
+	}
+
+	t.Logf("Cold battery arbitrage - Period 0: Charge=%.3f kW, BatteryPreHeat=%v, GridImport=%.3f kW",
+		decisions4[0].BatteryCharge, decisions4[0].BatteryPreHeatActive, decisions4[0].GridImport)
+	t.Logf("Cold battery arbitrage - Period 1: Discharge=%.3f kW, BatteryPreHeat=%v, GridImport=%.3f kW",
+		decisions4[1].BatteryDischarge, decisions4[1].BatteryPreHeatActive, decisions4[1].GridImport)
+}
+
+func TestBatteryPreHeatGridImportExceedsBatteryCharge(t *testing.T) {
+	// Test that grid import can exceed BatteryMaxCharge when battery preheating is active
+	config := SystemConfig{
+		BatteryCapacity:             10.0,
+		BatteryMaxCharge:            5.0,  // 5 kW max charge
+		BatteryMaxDischarge:         5.0,
+		BatteryMinSOC:               0.1,
+		BatteryMaxSOC:               0.9,
+		BatteryEfficiency:           0.9,
+		BatteryDegradationCost:      0.01,
+		MaxGridImport:               15.0, // 15 kW max import - enough for battery + preheat + load
+		MaxGridExport:               10.0,
+		BatteryPreHeatPower:         0.7,  // 700W battery preheating
+		BatteryPreHeatTempThreshold: 10.0, // 10°C threshold
+		BatteryThermalTimeConstant:  0.1,  // 10% thermal change per time slot
+	}
+
+	// Cold battery with very cheap price to maximize charging
+	forecast := []TimeSlot{
+		{
+			Hour:          0,
+			Timestamp:     1704326400,
+			ImportPrice:   0.02, // Very cheap
+			ExportPrice:   0.01,
+			SolarForecast: 0.0,
+			LoadForecast:  2.0, // 2 kW load
+			AirTemperature: 5.0,
+		},
+		{
+			Hour:          1,
+			Timestamp:     1704330000,
+			ImportPrice:   0.40, // Very expensive
+			ExportPrice:   0.25,
+			SolarForecast: 0.0,
+			LoadForecast:  2.0,
+			AirTemperature: 5.0,
+		},
+	}
+
+	mpc := NewController(config, 2, 0.2)
+	mpc.CurrentBatteryTemp = 5.0 // Below 10°C threshold
+	decisions := mpc.Optimize(forecast)
+
+	if len(decisions) != 2 {
+		t.Fatalf("Expected 2 decisions, got %d", len(decisions))
+	}
+
+	// Verify charging at high rate in period 0 (may not be exactly at maximum due to optimizer granularity)
+	if decisions[0].BatteryCharge < config.BatteryMaxCharge*0.8 {
+		t.Errorf("Expected battery to charge at high rate (>80%% of max), got %.3f kW", decisions[0].BatteryCharge)
+	}
+
+	// Verify battery preheating is active
+	if !decisions[0].BatteryPreHeatActive {
+		t.Error("Expected battery preheating to be active when charging cold battery")
+	}
+
+	// Calculate expected minimum grid import:
+	// Load + Battery charge/efficiency + Battery preheat
+	expectedMinImport := forecast[0].LoadForecast + 
+		decisions[0].BatteryCharge/config.BatteryEfficiency + 
+		config.BatteryPreHeatPower
+
+	// Grid import should match the expected value
+	if math.Abs(decisions[0].GridImport-expectedMinImport) > 0.1 {
+		t.Errorf("GridImport (%.3f) should be approximately %.3f (load + charge/eff + preheat)",
+			decisions[0].GridImport, expectedMinImport)
+	}
+
+	// Key verification: Grid import MUST exceed BatteryMaxCharge when battery preheating is active
+	if decisions[0].GridImport <= config.BatteryMaxCharge {
+		t.Errorf("GridImport (%.3f kW) should exceed BatteryMaxCharge (%.3f kW) when battery preheating is active",
+			decisions[0].GridImport, config.BatteryMaxCharge)
+	}
+
+	// Verify grid import is within MaxGridImport limit
+	if decisions[0].GridImport > config.MaxGridImport {
+		t.Errorf("GridImport (%.3f kW) exceeds MaxGridImport limit (%.3f kW)",
+			decisions[0].GridImport, config.MaxGridImport)
+	}
+
+	t.Logf("Maximum charging scenario:")
+	t.Logf("  Load: %.3f kW", forecast[0].LoadForecast)
+	t.Logf("  Battery Charge: %.3f kW", decisions[0].BatteryCharge)
+	t.Logf("  Battery Charge (with losses): %.3f kW", decisions[0].BatteryCharge/config.BatteryEfficiency)
+	t.Logf("  Battery PreHeat: %.3f kW", config.BatteryPreHeatPower)
+	t.Logf("  Total Grid Import: %.3f kW", decisions[0].GridImport)
+	t.Logf("  Grid Import exceeds BatteryMaxCharge by: %.3f kW", 
+		decisions[0].GridImport-config.BatteryMaxCharge)
+}
+
+func TestBatteryTemperatureThermalDynamics(t *testing.T) {
+	// Test that battery temperature evolves correctly based on thermal dynamics
+	config := SystemConfig{
+		BatteryCapacity:             10.0,
+		BatteryMaxCharge:            5.0,
+		BatteryMaxDischarge:         5.0,
+		BatteryMinSOC:               0.1,
+		BatteryMaxSOC:               0.9,
+		BatteryEfficiency:           0.9,
+		BatteryDegradationCost:      0.01,
+		MaxGridImport:               10.0,
+		MaxGridExport:               10.0,
+		BatteryPreHeatPower:         0.7,
+		BatteryPreHeatTempThreshold: 10.0,
+		BatteryThermalTimeConstant:  0.2, // 20% thermal change per time slot
+	}
+
+	// Test 1: Cold battery warming up toward warm air temperature (no charging)
+	forecast1 := []TimeSlot{
+		{
+			Hour:          0,
+			Timestamp:     1704326400,
+			ImportPrice:   0.30, // Expensive - won't charge
+			ExportPrice:   0.15,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: 20.0, // Warm air
+		},
+		{
+			Hour:          1,
+			Timestamp:     1704330000,
+			ImportPrice:   0.30,
+			ExportPrice:   0.15,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: 20.0,
+		},
+		{
+			Hour:          2,
+			Timestamp:     1704333600,
+			ImportPrice:   0.30,
+			ExportPrice:   0.15,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: 20.0,
+		},
+	}
+
+	mpc1 := NewController(config, 3, 0.5)
+	mpc1.CurrentBatteryTemp = 5.0 // Cold battery
+	decisions1 := mpc1.Optimize(forecast1)
+
+	if len(decisions1) != 3 {
+		t.Fatalf("Expected 3 decisions, got %d", len(decisions1))
+	}
+
+	// Verify battery is not charging (prices too high)
+	for i, dec := range decisions1 {
+		if dec.BatteryCharge > 0.1 {
+			t.Errorf("Period %d: Expected no charging at high prices, got %.3f kW", i, dec.BatteryCharge)
+		}
+	}
+
+	t.Logf("Battery warming scenario:")
+	t.Logf("  Period 0: Battery %.1f°C, Air %.1f°C, Charging: %.3f kW",
+		decisions1[0].BatteryAvgCellTemp, forecast1[0].AirTemperature, decisions1[0].BatteryCharge)
+	t.Logf("  Period 1: Battery %.1f°C, Air %.1f°C, Charging: %.3f kW",
+		decisions1[1].BatteryAvgCellTemp, forecast1[1].AirTemperature, decisions1[1].BatteryCharge)
+	t.Logf("  Period 2: Battery %.1f°C, Air %.1f°C, Charging: %.3f kW",
+		decisions1[2].BatteryAvgCellTemp, forecast1[2].AirTemperature, decisions1[2].BatteryCharge)
+
+	// Test 2: Warm battery cooling down toward cold air temperature (no charging)
+	forecast2 := []TimeSlot{
+		{
+			Hour:          0,
+			Timestamp:     1704326400,
+			ImportPrice:   0.30, // Expensive - won't charge
+			ExportPrice:   0.15,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: 0.0,  // Cold air
+		},
+		{
+			Hour:          1,
+			Timestamp:     1704330000,
+			ImportPrice:   0.30,
+			ExportPrice:   0.15,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: 0.0,
+		},
+		{
+			Hour:          2,
+			Timestamp:     1704333600,
+			ImportPrice:   0.30,
+			ExportPrice:   0.15,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: 0.0,
+		},
+	}
+
+	mpc2 := NewController(config, 3, 0.5)
+	mpc2.CurrentBatteryTemp = 20.0 // Warm battery
+	decisions2 := mpc2.Optimize(forecast2)
+
+	if len(decisions2) != 3 {
+		t.Fatalf("Expected 3 decisions, got %d", len(decisions2))
+	}
+
+	t.Logf("Battery cooling scenario:")
+	t.Logf("  Period 0: Battery %.1f°C, Air %.1f°C, Charging: %.3f kW",
+		decisions2[0].BatteryAvgCellTemp, forecast2[0].AirTemperature, decisions2[0].BatteryCharge)
+	t.Logf("  Period 1: Battery %.1f°C, Air %.1f°C, Charging: %.3f kW",
+		decisions2[1].BatteryAvgCellTemp, forecast2[1].AirTemperature, decisions2[1].BatteryCharge)
+	t.Logf("  Period 2: Battery %.1f°C, Air %.1f°C, Charging: %.3f kW",
+		decisions2[2].BatteryAvgCellTemp, forecast2[2].AirTemperature, decisions2[2].BatteryCharge)
+
+	// Test 3: Verify temperature forecasting enables optimizer to make smart decisions
+	// Cold battery that stays cold (no natural warming) - optimizer should see preheating cost
+	forecast3 := []TimeSlot{
+		{
+			Hour:          0,
+			Timestamp:     1704326400,
+			ImportPrice:   0.03, // Very cheap
+			ExportPrice:   0.01,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: -10.0, // Very cold air - battery will stay cold
+		},
+		{
+			Hour:          1,
+			Timestamp:     1704330000,
+			ImportPrice:   0.03, // Same cheap price
+			ExportPrice:   0.01,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: -10.0,
+		},
+		{
+			Hour:          2,
+			Timestamp:     1704333600,
+			ImportPrice:   0.40, // Expensive - discharge
+			ExportPrice:   0.20,
+			SolarForecast: 0.0,
+			LoadForecast:  1.0,
+			AirTemperature: -10.0,
+		},
+	}
+
+	mpc3 := NewController(config, 3, 0.2)
+	mpc3.CurrentBatteryTemp = 5.0 // Cold battery
+	decisions3 := mpc3.Optimize(forecast3)
+
+	if len(decisions3) != 3 {
+		t.Fatalf("Expected 3 decisions, got %d", len(decisions3))
+	}
+
+	// The key insight: optimizer sees temperature forecast and knows:
+	// - All periods have cold battery (< 10°C)
+	// - Charging any period requires preheating (extra 0.7 kW cost)
+	// - Prices are same in period 0 and 1
+	// - Should still charge when profitable despite preheating cost
+
+	// Verify some charging happens during cheap periods
+	totalCharging := decisions3[0].BatteryCharge + decisions3[1].BatteryCharge
+	if totalCharging <= 0 {
+		t.Error("Expected some charging during cheap price periods (0-1) despite cold battery")
+	}
+
+	// When charging happens in cold conditions, preheating should be active
+	// Note: Once battery reaches threshold temp via preheating, it may charge without preheating in subsequent periods
+	for i := 0; i < 2; i++ {
+		if decisions3[i].BatteryCharge > 0.1 {
+			// Only check preheating if battery temp is strictly below threshold
+			if decisions3[i].BatteryAvgCellTemp < config.BatteryPreHeatTempThreshold {
+				if !decisions3[i].BatteryPreHeatActive {
+					t.Errorf("Period %d: Expected preheating active when charging (temp: %.1f°C < %.1f°C)",
+						i, decisions3[i].BatteryAvgCellTemp, config.BatteryPreHeatTempThreshold)
+				}
+			}
+		}
+	}
+
+	// Period 2: Should not charge at expensive price
+	if decisions3[2].BatteryCharge > 0.1 {
+		t.Error("Expected no charging in period 2 at expensive prices")
+	}
+
+	t.Logf("Battery temperature forecasting enables smart optimization:")
+	t.Logf("  Period 0: Battery %.1f°C, Air %.1f°C, Charge: %.3f kW, PreHeat: %v",
+		decisions3[0].BatteryAvgCellTemp, forecast3[0].AirTemperature, decisions3[0].BatteryCharge, decisions3[0].BatteryPreHeatActive)
+	t.Logf("  Period 1: Battery %.1f°C, Air %.1f°C, Charge: %.3f kW, PreHeat: %v",
+		decisions3[1].BatteryAvgCellTemp, forecast3[1].AirTemperature, decisions3[1].BatteryCharge, decisions3[1].BatteryPreHeatActive)
+	t.Logf("  Period 2: Battery %.1f°C, Air %.1f°C, Charge: %.3f kW, PreHeat: %v",
+		decisions3[2].BatteryAvgCellTemp, forecast3[2].AirTemperature, decisions3[2].BatteryCharge, decisions3[2].BatteryPreHeatActive)
+	t.Logf("  Note: Optimizer accounts for temperature forecasts and preheating costs in all periods")
 }

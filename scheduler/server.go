@@ -56,9 +56,10 @@ type MPCDecisionInfo struct {
 	BatteryCharge    float64 `json:"battery_charge"`
 	BatteryDischarge float64 `json:"battery_discharge"`
 	GridImport       float64 `json:"grid_import"`
-	GridExport       float64 `json:"grid_export"`
-	BatterySOC       float64 `json:"battery_soc"`
-	Profit           float64 `json:"profit"`
+	GridExport           float64 `json:"grid_export"`
+	BatterySOC           float64 `json:"battery_soc"`
+	Profit               float64 `json:"profit"`
+	BatteryPreHeatActive bool    `json:"battery_preheat_active"`
 	// Forecast data used for this decision
 	ImportPrice        float64 `json:"import_price"`
 	ExportPrice        float64 `json:"export_price"`
@@ -209,10 +210,11 @@ func (hs *WebServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 			BatteryCharge:      dec.BatteryCharge,
 			BatteryDischarge:   dec.BatteryDischarge,
 			GridImport:         dec.GridImport,
-			GridExport:         dec.GridExport,
-			BatterySOC:         dec.BatterySOC,
-			Profit:             dec.Profit,
-			ImportPrice:        dec.ImportPrice,
+			GridExport:           dec.GridExport,
+			BatterySOC:           dec.BatterySOC,
+			Profit:               dec.Profit,
+			BatteryPreHeatActive: dec.BatteryPreHeatActive,
+			ImportPrice:          dec.ImportPrice,
 			ExportPrice:        dec.ExportPrice,
 			SolarForecast:      dec.SolarForecast,
 			LoadForecast:       dec.LoadForecast,
@@ -507,10 +509,11 @@ func (hs *WebServer) buildStatusData() map[string]any {
 			BatteryCharge:      dec.BatteryCharge,
 			BatteryDischarge:   dec.BatteryDischarge,
 			GridImport:         dec.GridImport,
-			GridExport:         dec.GridExport,
-			BatterySOC:         dec.BatterySOC,
-			Profit:             dec.Profit,
-			ImportPrice:        dec.ImportPrice,
+			GridExport:           dec.GridExport,
+			BatterySOC:           dec.BatterySOC,
+			Profit:               dec.Profit,
+			BatteryPreHeatActive: dec.BatteryPreHeatActive,
+			ImportPrice:          dec.ImportPrice,
 			ExportPrice:        dec.ExportPrice,
 			SolarForecast:      dec.SolarForecast,
 			LoadForecast:       dec.LoadForecast,

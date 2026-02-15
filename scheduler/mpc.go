@@ -51,32 +51,29 @@ func (s *MinerScheduler) RunMPCOptimize(ctx context.Context) error {
 
 	// Step 3: Create MPC controller
 	systemConfig := mpc.SystemConfig{
-		BatteryCapacity:        config.BatteryCapacity,
-		BatteryMaxCharge:       config.BatteryMaxCharge,
-		BatteryMaxDischarge:    config.BatteryMaxDischarge,
-		BatteryMinSOC:          config.BatteryMinSOC,
-		BatteryMaxSOC:          config.BatteryMaxSOC,
-		BatteryEfficiency:      config.BatteryEfficiency,
-		BatteryDegradationCost: config.BatteryDegradationCost,
-		MaxGridImport:          config.MaxGridImport,
-		MaxGridExport:          config.MaxGridExport,
+		BatteryCapacity:             config.BatteryCapacity,
+		BatteryMaxCharge:            config.BatteryMaxCharge,
+		BatteryMaxDischarge:         config.BatteryMaxDischarge,
+		BatteryMinSOC:               config.BatteryMinSOC,
+		BatteryMaxSOC:               config.BatteryMaxSOC,
+		BatteryEfficiency:           config.BatteryEfficiency,
+		BatteryDegradationCost:      config.BatteryDegradationCost,
+		MaxGridImport:               config.MaxGridImport,
+		MaxGridExport:               config.MaxGridExport,
+		BatteryPreHeatPower:         config.BatteryPreHeatPower,
+		BatteryPreHeatTempThreshold: config.BatteryPreHeatTempThreshold,
+		BatteryThermalTimeConstant:  config.BatteryThermalTimeConstant,
 	}
 
 	horizon := len(forecast)
 	controller := mpc.NewController(systemConfig, horizon, initialSOC)
+	controller.CurrentBatteryTemp = plantInfo.ESSAvgCellTemperature
 
 	// Step 4: Run optimization
 	decisions := controller.Optimize(forecast)
 	if len(decisions) == 0 {
 		s.logger.Printf("MPC optimization produced no decisions")
 		return nil
-	}
-
-	// Step 4.1: Add battery temperature to all decisions
-	// Use current temperature as baseline (future temperature forecasting could be added later)
-	batteryTemp := plantInfo.ESSAvgCellTemperature
-	for i := range decisions {
-		decisions[i].BatteryAvgCellTemp = batteryTemp
 	}
 
 	// Step 5: Save optimization results to memory

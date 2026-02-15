@@ -57,8 +57,11 @@ func (s *MinerScheduler) saveMPCDecisions(ctx context.Context, decisions []mpc.C
 			solar_forecast,
 			load_forecast,
 			cloud_coverage,
-			weather_symbol
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			weather_symbol,
+			battery_avg_cell_temp,
+			air_temperature,
+			battery_preheat_active
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		ON CONFLICT (timestamp) DO UPDATE SET
 			hour = EXCLUDED.hour,
 			battery_charge = EXCLUDED.battery_charge,
@@ -74,7 +77,10 @@ func (s *MinerScheduler) saveMPCDecisions(ctx context.Context, decisions []mpc.C
 			solar_forecast = EXCLUDED.solar_forecast,
 			load_forecast = EXCLUDED.load_forecast,
 			cloud_coverage = EXCLUDED.cloud_coverage,
-			weather_symbol = EXCLUDED.weather_symbol
+			weather_symbol = EXCLUDED.weather_symbol,
+			battery_avg_cell_temp = EXCLUDED.battery_avg_cell_temp,
+			air_temperature = EXCLUDED.air_temperature,
+			battery_preheat_active = EXCLUDED.battery_preheat_active
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
@@ -100,6 +106,9 @@ func (s *MinerScheduler) saveMPCDecisions(ctx context.Context, decisions []mpc.C
 			decision.LoadForecast,
 			decision.CloudCoverage,
 			decision.WeatherSymbol,
+			decision.BatteryAvgCellTemp,
+			decision.AirTemperature,
+			decision.BatteryPreHeatActive,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert decision for hour %d: %w", decision.Hour, err)
@@ -155,7 +164,10 @@ func (s *MinerScheduler) loadLatestMPCDecisions(ctx context.Context) ([]mpc.Cont
 			solar_forecast,
 			load_forecast,
 			cloud_coverage,
-			weather_symbol
+			weather_symbol,
+			battery_avg_cell_temp,
+			air_temperature,
+			battery_preheat_active
 		FROM mpc_decisions
 		WHERE timestamp >= $1
 		ORDER BY timestamp ASC
@@ -170,6 +182,9 @@ func (s *MinerScheduler) loadLatestMPCDecisions(ctx context.Context) ([]mpc.Cont
 		var decision mpc.ControlDecision
 		var cloudCoverage sql.NullFloat64
 		var weatherSymbol sql.NullString
+		var batteryAvgCellTemp sql.NullFloat64
+		var airTemperature sql.NullFloat64
+		var batteryPreHeatActive sql.NullBool
 
 		err := rows.Scan(
 			&decision.Timestamp,
@@ -188,6 +203,9 @@ func (s *MinerScheduler) loadLatestMPCDecisions(ctx context.Context) ([]mpc.Cont
 			&decision.LoadForecast,
 			&cloudCoverage,
 			&weatherSymbol,
+			&batteryAvgCellTemp,
+			&airTemperature,
+			&batteryPreHeatActive,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan decision: %w", err)
@@ -198,6 +216,15 @@ func (s *MinerScheduler) loadLatestMPCDecisions(ctx context.Context) ([]mpc.Cont
 		}
 		if weatherSymbol.Valid {
 			decision.WeatherSymbol = weatherSymbol.String
+		}
+		if batteryAvgCellTemp.Valid {
+			decision.BatteryAvgCellTemp = batteryAvgCellTemp.Float64
+		}
+		if airTemperature.Valid {
+			decision.AirTemperature = airTemperature.Float64
+		}
+		if batteryPreHeatActive.Valid {
+			decision.BatteryPreHeatActive = batteryPreHeatActive.Bool
 		}
 
 		decisions = append(decisions, decision)

@@ -74,9 +74,12 @@ type Config struct {
 	BatteryEfficiency      float64       `json:"battery_efficiency"`       // round-trip efficiency (0-1)
 	BatteryDegradationCost float64       `json:"battery_degradation_cost"` // $/kWh cycled
 	MaxGridImport          float64       `json:"max_grid_import"`          // kW
-	MaxGridExport          float64       `json:"max_grid_export"`          // kW
-	MaxSolarPower          float64       `json:"max_solar_power"`          // kW - peak solar power capacity
-	MPCExecutionInterval   time.Duration `json:"mpc_execution_interval"`   // How often to re-execute current MPC decision
+	MaxGridExport                 float64       `json:"max_grid_export"`                   // kW
+	MaxSolarPower                 float64       `json:"max_solar_power"`                   // kW - peak solar power capacity
+	MPCExecutionInterval          time.Duration `json:"mpc_execution_interval"`            // How often to re-execute current MPC decision
+	BatteryPreHeatPower           float64       `json:"battery_preheat_power"`             // kW - power consumption of battery preheating when active
+	BatteryPreHeatTempThreshold   float64       `json:"battery_preheat_temp_threshold"`    // °C - temperature threshold below which battery preheating activates
+	BatteryThermalTimeConstant    float64       `json:"battery_thermal_time_constant"`     // fraction per time slot - rate at which battery temperature approaches air temperature (0-1)
 
 	// Price adjustments
 	ImportPriceOperatorFee float64 `json:"import_price_operator_fee"` // EUR/MWh - Operator fee for import
@@ -125,9 +128,12 @@ func DefaultConfig() *Config {
 		MinersPowerLimit:         30.0,  // 30 kW total power limit for miners
 		MinerPowerStandby:        0.05,  // 0.05 kW (50 W) in standby
 		MinerPowerEco:            0.8,   // 0.8 kW (800 W) in eco mode
-		MinerPowerStandard:       1.6,   // 1.6 kW (1600 W) in standard mode
-		MinerPowerSuper:          1.8,   // 1.8 kW (1800 W) in super mode
-		UsePVPowerControl:        false, // Disabled by default
+		MinerPowerStandard:          1.6,   // 1.6 kW (1600 W) in standard mode
+		MinerPowerSuper:             1.8,   // 1.8 kW (1800 W) in super mode
+		UsePVPowerControl:           false, // Disabled by default
+		BatteryPreHeatPower:         0.7,   // 0.7 kW (700 W) battery preheating power
+		BatteryPreHeatTempThreshold: 10.0,  // 10°C - activate battery preheating below this temperature
+		BatteryThermalTimeConstant:  0.05,   // 0.05 - battery temperature moves 50% toward air temp per time slot when not charging
 	}
 }
 
@@ -350,6 +356,33 @@ func (c *Config) Validate() error {
 
 	if c.PVIntegrationPeriod <= 0 {
 		return fmt.Errorf("pv_integration_period must be greater than 0, got: %s", c.PVIntegrationPeriod)
+	}
+
+	// Validate battery preheat configuration
+	if c.BatteryPreHeatPower < 0 {
+		return fmt.Errorf("battery_preheat_power must be non-negative, got: %f", c.BatteryPreHeatPower)
+	}
+
+	if c.BatteryPreHeatTempThreshold < -50 || c.BatteryPreHeatTempThreshold > 100 {
+		return fmt.Errorf("battery_preheat_temp_threshold must be between -50 and 100°C, got: %f", c.BatteryPreHeatTempThreshold)
+	}
+
+	if c.BatteryThermalTimeConstant < 0 || c.BatteryThermalTimeConstant > 1 {
+		return fmt.Errorf("battery_thermal_time_constant must be between 0 and 1, got: %f", c.BatteryThermalTimeConstant)
+	}
+
+	// Validate that MaxGridImport can handle battery charging with preheating
+	// When charging at maximum rate with battery preheating active, total grid import will be:
+	// BatteryMaxCharge/Efficiency + BatteryPreHeatPower (plus any load)
+	// We check for a reasonable minimum to avoid configuration issues
+	if c.BatteryPreHeatPower > 0 && c.BatteryMaxCharge > 0 && c.BatteryEfficiency > 0 {
+		minRequiredImport := c.BatteryMaxCharge/c.BatteryEfficiency + c.BatteryPreHeatPower
+		if c.MaxGridImport < minRequiredImport {
+			return fmt.Errorf("max_grid_import (%.2f kW) may be insufficient for battery charging with preheating: "+
+				"minimum required is %.2f kW (%.2f kW battery charge with losses + %.2f kW battery preheat)",
+				c.MaxGridImport, minRequiredImport,
+				c.BatteryMaxCharge/c.BatteryEfficiency, c.BatteryPreHeatPower)
+		}
 	}
 
 	return nil
